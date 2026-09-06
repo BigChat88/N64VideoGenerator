@@ -31,11 +31,8 @@ after cloning.
 
 ```bash
 cd core
-make                 # builds video.z64 from video.mp4 in this folder
+make                
 ```
-
-`core/edlink.exe` is a flashing tool for loading the resulting ROM onto an
-EverDrive64 flash cart for testing on real hardware.
 
 ## [`app/`](app)
 
@@ -55,18 +52,8 @@ npm install
 npm run dev
 ```
 
-## Repository layout
+# AI Note 
 
-```
-core/
-  src/main.c      N64 player firmware (libdragon)
-  Makefile        video.mp4 -> video.z64, via the full libdragon toolchain
-  libdragon/      git submodule (preview branch)
-  edlink.exe      EverDrive64 flashing tool
-app/
-  src/main/       Electron main process + conversion pipeline (convert.ts)
-  src/preload/    IPC bridge
-  src/renderer/   UI
-  resources/      prebuilt player .elf + bundled native tools
-.github/workflows/  CI: cross-compiles the native host tools app bundles
-```
+The application was developed using AI. I’m just an enthusiast who wanted to
+generate videos on the N64. In this case, the means used to achieve it are not 
+relevant to me.
