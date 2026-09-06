@@ -123,6 +123,19 @@ regenerating these files.
   self-correct but also does not grow). General trade-off: on long videos, if
   the N64 cannot decode in real time, audio and video can drift apart
   gradually.
+- **2026-09-06**: regenerated after aligning the end-of-video play icon with the
+  pause icon in `core/src/main.c`. `fmv_play()` sets the display to the video's
+  own resolution/aspect ratio, but `wait_for_replay()` hardcoded
+  `RESOLUTION_320x240`, so on any video that is not exactly 320x240 the play icon
+  was drawn in a different coordinate space and VI scaling than the pause icon —
+  landing at a different on-screen height and a different apparent size even
+  though both use `PAUSE_BAR_H` / `PAUSE_BOTTOM_MARGIN`. Fixed by probing the
+  video once with `video_open`/`video_get_info`/`video_close` in `main()` and
+  passing that `resolution_t` (width, height, aspect ratio) to
+  `wait_for_replay()`, which now calls `display_init()` with the same parameters
+  fmv used (also switched to `DEPTH_32_BPP` / `FILTERS_RESAMPLE` to match). Both
+  icons now share the video's coordinate space, so the play triangle sits at the
+  same height and scale as the pause bars.
 - **2026-09-05 (5)**: regenerated after refining pause resume. Previously it
   saved `time_sec` (the **video** frame's time, which runs behind the audio)
   and did `wav64_seek` to that value; with **uncompressed** audio that leaves

@@ -97,8 +97,13 @@ static void video_osd_callback(void *ctx, int frame_idx, float time_sec, fmv_con
  * Replay Action at the end of the video
  * 
  */
-static void wait_for_replay(void) {
-    display_init(RESOLUTION_320x240, DEPTH_16_BPP, 2, GAMMA_NONE, FILTERS_DISABLED);
+static void wait_for_replay(resolution_t video_res) {
+    // Use the exact same display resolution / aspect ratio fmv_play() used for
+    // playback, so the replay screen shares the video's coordinate space and VI
+    // scaling. That makes the play icon land at the same on-screen height and
+    // size as the pause icon (both are PAUSE_BAR_H tall and sit PAUSE_BOTTOM_MARGIN
+    // above the bottom edge).
+    display_init(video_res, DEPTH_32_BPP, 2, GAMMA_NONE, FILTERS_RESAMPLE);
 
     const uint32_t white = graphics_make_color(255, 255, 255, 255);
     const uint32_t black = graphics_make_color(0, 0, 0, 255);
@@ -136,12 +141,26 @@ int main(void) {
     video_register_codec(&mpeg1_codec);
     video_register_codec(&h264_codec);
 
+    const char *video_fn = find_video_filename();
+
+    // Probe the video once for its resolution / aspect ratio: fmv_play() sets the
+    // display to these values, and wait_for_replay() must match them (see there).
+    video_t *probe = video_open(video_fn, &(video_parms_t){ .buffered_pics = 1 });
+    video_info_t vinfo = video_get_info(probe);
+    video_close(probe);
+    resolution_t video_res = {
+        .width = vinfo.width,
+        .height = vinfo.height,
+        .aspect_ratio = vinfo.aspect_ratio,
+        .overscan_margin = 0,
+    };
+
     for (;;) {
-        fmv_play(find_video_filename(), &(fmv_parms_t){
+        fmv_play(video_fn, &(fmv_parms_t){
             .audio_mixer_channel = AUDIO_MIXER_CHANNEL,
             .osd_callback = video_osd_callback,
             .disable_frame_skipping = true,
         });
-        wait_for_replay();
+        wait_for_replay(video_res);
     }
 }
