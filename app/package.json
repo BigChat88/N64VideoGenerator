@@ -1,0 +1,39 @@
+{
+  "name": "n64-video-generator-desktop",
+  "version": "0.1.0",
+  "description": "Turns a video (mp4, etc.) into a playable N64 .z64 ROM, with a cross-platform desktop interface.",
+  "private": true,
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-static.mjs",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && electron . --dev",
+    "smoke-test": "npm run build && node scripts/smoke-test.mjs",
+    "dist": "npm run build && electron-builder"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "^7.0.2"
+  },
+  "build": {
+    "appId": "com.n64videogenerator.desktop",
+    "productName": "N64 Video Generator",
+    "icon": "assets/icon.png",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "resources/rom-assets/**/*",
+      "resources/tools/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
+}

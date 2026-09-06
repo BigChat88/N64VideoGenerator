@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>N64 Video Generator</title>
+  <link rel="icon" href="icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <h1>N64 Video Generator</h1>
+
+  <section class="field">
+    <label>Input video</label>
+    <div class="row">
+      <input type="text" id="inputPath" readonly placeholder="Pick a video file..." />
+      <button id="btnPickInput">Choose...</button>
+    </div>
+  </section>
+
+  <section class="field">
+    <label>ROM title</label>
+    <input type="text" id="romTitle" value="My Video" maxlength="20" />
+  </section>
+
+  <section class="field">
+    <label>Video codec</label>
+    <select id="codec">
+      <option value="mpeg1" selected>MPEG-1 (recommended, most compatible)</option>
+      <option value="h264">H.264 (better quality, more demanding on the console)</option>
+    </select>
+  </section>
+
+  <section class="field">
+    <label>Quality (<span id="qualityValue">70</span>/100)</label>
+    <input type="range" id="quality" min="0" max="100" value="70" />
+  </section>
+
+  <section class="field row">
+    <label><input type="checkbox" id="quick" /> Fast encoding (lower quality, much faster)</label>
+  </section>
+
+  <details class="advanced">
+    <summary>Advanced options</summary>
+
+    <section class="field">
+      <label>Audio compression</label>
+      <select id="audioCompress">
+        <option value="vadpcm" selected>VADPCM (fast on the console, default)</option>
+        <option value="opus">Opus (better compression, more expensive)</option>
+        <option value="ulc">ULC</option>
+        <option value="none">Uncompressed</option>
+      </select>
+    </section>
+
+    <section class="field row">
+      <div>
+        <label>Audio sample rate (Hz, max 32000)</label>
+        <input type="number" id="audioSampleRate" value="32000" min="8000" max="32000" step="1000" />
+        <small id="opusRateNote" hidden>Opus always uses 48000 Hz internally; this field is ignored.</small>
+      </div>
+      <div>
+        <label>Channels</label>
+        <select id="audioChannels">
+          <option value="1" selected>Mono</option>
+          <option value="2">Stereo</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="field">
+      <label>Seek interval (seconds)</label>
+      <input type="number" id="seekIntervalSec" value="5" />
+    </section>
+
+    <section class="field">
+      <label>Encoding profile</label>
+      <select id="profile">
+        <option value="auto" selected>Auto</option>
+        <option value="cartoon">Cartoon / animation</option>
+        <option value="film">Film / live action</option>
+        <option value="noisy">Noisy (VHS, old camera)</option>
+        <option value="none">None</option>
+      </select>
+    </section>
+
+    <section class="field">
+      <label>Quantization matrix</label>
+      <select id="quantMatrix">
+        <option value="n64" selected>N64 (recommended)</option>
+        <option value="std">Standard</option>
+      </select>
+    </section>
+  </details>
+
+  <button id="btnConvert" class="primary">Convert to .z64</button>
+
+  <div class="modal-backdrop" id="convertModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h2 id="modalTitle">Generating your ROM</h2>
+      <div class="stage" id="stageLabel">Starting...</div>
+
+      <div class="progressbar" id="progressBar">
+        <div class="progressbar-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-pct" id="progressPct">0%</div>
+
+      <details class="log-details">
+        <summary>Show details</summary>
+        <pre id="log"></pre>
+      </details>
+
+      <div class="modal-actions">
+        <button id="btnCloseModal" disabled>Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+/**
+ * @file asset_internal.h
+ * @author Giovanni Bajo <giovannibajo@gmail.com>
+ * @author Liam Coleman <gamemasterplc@gmail.com>
+ */
+#ifndef __LIBDRAGON_ASSET_INTERNAL_H
+#define __LIBDRAGON_ASSET_INTERNAL_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#include <stdio.h>
+
+#define ASSET_MAGIC                 "DCA"   ///< Magic compressed asset header
+#define ASSET_FLAG_WINSIZE_MASK     0x07    ///< Mask to isolate the window size in the flags
+#define ASSET_FLAG_WINSIZE_16K      0x00    ///< 16 KiB window size
+#define ASSET_FLAG_WINSIZE_8K       0x01    ///< 8 KiB window size
+#define ASSET_FLAG_WINSIZE_4K       0x02    ///< 4 KiB window size
+#define ASSET_FLAG_WINSIZE_2K       0x03    ///< 2 KiB window size
+#define ASSET_FLAG_WINSIZE_32K      0x04    ///< 32 KiB window size
+#define ASSET_FLAG_WINSIZE_64K      0x05    ///< 64 KiB window size
+#define ASSET_FLAG_WINSIZE_128K     0x06    ///< 128 KiB window size
+#define ASSET_FLAG_WINSIZE_256K     0x07    ///< 256 KiB window size
+#define ASSET_FLAG_ALGO_SHIFT       4       ///< Shift to isolate the compression algorithm
+#define ASSET_ALIGNMENT             32      ///< Aligned to instruction cacheline
+
+#define ASSET_FLAG_ALGO(flag)       (((flag) >> ASSET_FLAG_ALGO_SHIFT) & 3)     ///< Get compression algorithm from flags
+
+__attribute__((used))
+static inline int asset_buf_size(int size, int cmp_size, int margin, int *cmp_offset_dst)
+{
+    // add 8 because the assembly decompressors do writes up to 8 bytes out-of-bounds,
+    // that could overwrite the input data.
+    margin += 8;
+    int bufsize = size + margin;
+    int cmp_offset = bufsize - cmp_size;
+    // Align the source buffer to 4 bytes, so that we can use 32-bit loads (required by shrinkler).
+    // Notice that we need at least 2-byte alignment anyway, for DMA.
+    while (cmp_offset & 3) {
+        cmp_offset++;
+        bufsize++;
+    }
+    if(cmp_offset_dst) {
+        *cmp_offset_dst = cmp_offset;
+    }
+    if (bufsize & 15) {
+        // In case we need to call invalidate (see below), we need an aligned buffer
+        bufsize += 16 - (bufsize & 15);
+    }
+    return bufsize;
+}
+
+__attribute__((used))
+static inline int asset_winsize_from_flags(uint16_t flags) {
+    flags &= ASSET_FLAG_WINSIZE_MASK;
+    if (flags & 4) 
+        return (2*1024) << flags;
+    else
+        return (16*1024) >> flags;
+}
+
+__attribute__((used))
+static int asset_winsize_to_flags(int winsize) {
+    if (winsize == 16*1024)  return ASSET_FLAG_WINSIZE_16K;
+    if (winsize == 8*1024)   return ASSET_FLAG_WINSIZE_8K;
+    if (winsize == 4*1024)   return ASSET_FLAG_WINSIZE_4K;
+    if (winsize == 2*1024)   return ASSET_FLAG_WINSIZE_2K;
+    if (winsize == 32*1024)  return ASSET_FLAG_WINSIZE_32K;
+    if (winsize == 64*1024)  return ASSET_FLAG_WINSIZE_64K;
+    if (winsize == 128*1024) return ASSET_FLAG_WINSIZE_128K;
+    if (winsize == 256*1024) return ASSET_FLAG_WINSIZE_256K;
+    return -1;
+}
+
+/** @brief Header of a compressed asset */
+typedef struct {
+    char magic[3];          ///< Magic header
+    uint8_t version;        ///< Version of the asset header
+    uint8_t flags;          ///< Compression algorithm
+    uint8_t varints[12];    ///< Varint-encoded header fields
+} asset_header_t;
+
+/** Asset header, with parsed fields */
+typedef struct {
+    asset_header_t base;        ///< Base header data
+    uint32_t cmp_size;          ///< Compressed size (decoded varint)
+    uint32_t orig_size;         ///< Original size (decoded varint)
+    uint32_t inplace_margin;    ///< In-place decompression margin (decoded varint)
+} asset_parsed_header_t;
+
+/** @brief A decompression algorithm used by the asset library */
+typedef struct {
+    /**
+     * @brief Decompress a full file already available in memory (possibly racing with DMA on N64)
+     *
+     * Optional fast-path, typically implemented in assembly on N64.
+     * When unavailable, callers can always fall back to the streaming API
+     * (decompress_init/decompress_read) to load the full file.
+     *
+     * @return number of bytes written, or <0 on error
+     */
+    int (*decompress_full)(const uint8_t *in, size_t cmp_size, uint8_t *out, size_t len);
+} asset_compression_full_t;
+
+/** @brief A streaming decompression algorithm used by the asset library */
+typedef struct {
+    int state_size;     ///< Basic size of the decompression state (without ringbuffer)
+
+    /** @brief Initialize the decompression state. State is guaranteed to be 16-byte aligned */
+    void (*decompress_init)(void *state, int fd, int winsize);
+
+    /** @brief Partially read a decompressed file from a state */
+    ssize_t (*decompress_read)(void *state, void *buf, size_t len);
+
+    /** @brief Reset decompression state after rewind */
+    void (*decompress_reset)(void *state);
+} asset_compression_stream_t;
+
+/** @brief Open a file as FILE* and assert on error */
+FILE *must_fopen(const char *fn);
+/** @brief Open a file and assert on error */
+int must_open(const char *fn);
+/** @brief Load an asset from file descriptor with automatic memory allocation */
+void *asset_loadfd(int fd, int *sz);
+/** @brief Load an asset from file descriptor into a provided buffer */
+bool asset_loadfd_into(int fd, int *sz, void *buf, int *buf_size);
+/** @brief Open a file descriptor as a FILE* with asset support */
+FILE *asset_fdopen(int fd, int *sz);
+
+#endif

@@ -1,0 +1,210 @@
+/*
+    utils: utility functions for tools
+    Written by Giovanni Bajo <giovannibajo@gmail.com>
+
+    This tool is part of the Libdragon SDK.
+
+    This is free and unencumbered software released into the public domain.
+
+    For more information, please refer to <http://unlicense.org/>
+*/
+#ifndef LIBDRAGON_TOOLS_UTILS_H
+#define LIBDRAGON_TOOLS_UTILS_H
+
+#include "polyfill.h"
+#include "../../src/utils.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <sys/stat.h>
+
+__attribute__((used))
+static char* path_remove_trailing_slash(char *path)
+{
+    path = strdup(path);
+    int n = strlen(path);
+    if (path[n-1] == '/' || path[n-1] == '\\')
+        path[n-1] = 0;
+    return path;
+}
+
+__attribute__((used))
+static char *change_ext(const char *fn, const char *ext)
+{
+    size_t fn_len = strlen(fn);
+    size_t ext_len = strlen(ext);
+    const char *dot = strrchr(fn, '.');
+    size_t base_len = dot ? (size_t)(dot - fn) : fn_len;
+    char *out = (char *)malloc(base_len + ext_len + 1);
+    memcpy(out, fn, base_len);
+    memcpy(out + base_len, ext, ext_len);
+    out[base_len + ext_len] = 0;
+    return out;
+}
+
+__attribute__((used))
+static bool file_exists(const char *filename)
+{
+    FILE *f = fopen(filename, "r");
+    if (f) fclose(f);
+    return f != NULL;
+}
+
+// Find the directory where the libdragon toolchain is installed.
+// This is where you can find GCC, the linker, etc.
+__attribute__((used))
+static const char *n64_toolchain_dir(void)
+{
+    static char *n64_inst = NULL;
+    if (n64_inst)
+        return n64_inst;
+
+    // Find the toolchain installation directory.
+    // n64.mk supports having a separate installation for the toolchain and
+    // libdragon. So first check if N64_GCCPREFIX is set; if so the toolchain
+    // is there. Otherwise, fallback to N64_INST which is where we expect
+    // the toolchain to reside.
+    n64_inst = getenv("N64_GCCPREFIX");
+    if (!n64_inst)
+        n64_inst = getenv("N64_INST");
+    if (!n64_inst)
+        return NULL;
+
+    // Remove the trailing backslash if any. On some system, running
+    // popen with a path containing double backslashes will fail, so
+    // we normalize it here.
+    n64_inst = path_remove_trailing_slash(n64_inst);
+    return n64_inst;
+}
+
+// Find the prefix to be prepended for GCC commands.
+// This is everything before gcc, ld, objdump, etc
+__attribute__((used))
+static const char *n64_gccprefix_triplet(void)
+{
+    static char *n64_gccprefix_triplet = NULL;
+    if (n64_gccprefix_triplet)
+        return n64_gccprefix_triplet;
+
+    const char *inst = n64_toolchain_dir();
+    if (!inst)
+        return NULL;
+    const char *target = getenv("N64_TARGET");
+    if (!target)
+        target = "mips64-elf";
+
+    int ret;
+    if (target[0])
+        ret = asprintf(&n64_gccprefix_triplet, "%s/bin/%s-", inst, target);
+    else
+        ret = asprintf(&n64_gccprefix_triplet, "%s/bin/", inst);
+
+    if (ret < 0) {
+        perror("asprintf");
+        exit(1);
+    }
+    return n64_gccprefix_triplet;
+}
+
+// Find the directory where the libdragon tools are installed.
+// This is where you can find mksprite, mkfont, etc.
+__attribute__((used))
+static const char *n64_tools_dir(void)
+{
+    static char *n64_inst = NULL;
+    if (n64_inst)
+        return n64_inst;
+
+    // Find the tools installation directory.
+    n64_inst = getenv("N64_INST");
+    if (!n64_inst)
+        return NULL;
+
+    // Remove the trailing backslash if any. On some system, running
+    // popen with a path containing double backslashes will fail, so
+    // we normalize it here.
+    n64_inst = path_remove_trailing_slash(n64_inst);
+    return n64_inst;
+}
+
+__attribute__((used))
+static uint8_t* slurp(const char *fn, int *size)
+{
+    FILE *f = fopen(fn, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    int sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t *buf = (uint8_t*)malloc(sz);
+    fread(buf, 1, sz, f);
+    fclose(f);
+    if (size) *size = sz;
+    return buf;
+}
+
+/** @brief Read entire contents of an open FILE (e.g. tmpfile). Caller must free(). */
+__attribute__((used))
+static uint8_t* slurp_fp(FILE *f, int *size)
+{
+    fflush(f);
+    if (fseek(f, 0, SEEK_END) != 0) return NULL;
+    long sz = ftell(f);
+    if (sz < 0) return NULL;
+    if (fseek(f, 0, SEEK_SET) != 0) return NULL;
+    uint8_t *buf = (uint8_t*)malloc(sz);
+    if (!buf) return NULL;
+    if (sz > 0 && fread(buf, 1, sz, f) != (size_t)sz) {
+        free(buf);
+        return NULL;
+    }
+    if (size) *size = (int)sz;
+    return buf;
+}
+
+#ifdef __cplusplus
+#include <vector>
+__attribute__((used))
+static std::vector<uint8_t> slurp(const char *fn)
+{
+    std::vector<uint8_t> ret;
+    FILE *f = fopen(fn, "rb");
+    if (!f) return ret;
+    fseek(f, 0, SEEK_END);
+    ret.resize(ftell(f));
+    fseek(f, 0, SEEK_SET);
+    if (!ret.empty() && fread(&ret[0], 1, ret.size(), f) != ret.size())
+        ret.clear();
+    fclose(f);
+    return ret;
+}
+
+__attribute__((used))
+static std::vector<uint8_t> slurp(FILE *f)
+{
+    std::vector<uint8_t> ret;
+    fflush(f);
+    if (fseek(f, 0, SEEK_END) != 0) return ret;
+    long sz = ftell(f);
+    if (sz < 0) return ret;
+    if (fseek(f, 0, SEEK_SET) != 0) return ret;
+    ret.resize((size_t)sz);
+    if (sz > 0 && fread(&ret[0], 1, (size_t)sz, f) != (size_t)sz)
+        ret.clear();
+    return ret;
+}
+#endif
+
+__attribute__((used))
+static void forward_to_stderr(FILE *log, const char *prefix)
+{
+    char *line = 0; size_t linesize = 0;
+    while (getline(&line, &linesize, log) != -1) {
+        fputs(prefix, stderr);
+        fputs(line, stderr);
+    }
+    free(line);
+}
+
+#endif

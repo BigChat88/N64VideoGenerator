@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+
+# Bash strict mode http://redsymbol.net/articles/unofficial-bash-strict-mode/
+set -euo pipefail
+IFS=$'\n\t'
+
+# If --test is passed, run tests after building
+TEST_MODE=false
+# If --no-examples is passed, don't build examples
+BUILD_EXAMPLES=true
+while (( $# )); do
+  case "$1" in
+    --test) TEST_MODE=true; shift ;;
+    --no-examples) BUILD_EXAMPLES=false; shift ;;
+    *) break ;;
+  esac
+done
+
+if [[ -z ${N64_INST-} ]]; then
+  echo N64_INST environment variable is not defined
+  echo Please set N64_INST to point to your libdragon toolchain directory
+  exit 1
+fi
+
+# Run sanity checks for MSYS2 environments on Windows. There are a few common things
+# that can go wrong, and it's better to explicitly diagnose them here rather than
+# have the build fail mysteriously later.
+# MSYS2 environments can be identified by running 'uname' and checking the MSYSTEM
+# environment variable that the shells set.
+if [[ "$(uname)" == MSYS* || "$(uname)" == MINGW* ]]; then
+  if [ "${MSYSTEM:-}" != "MINGW64" ] && [ "${MSYSTEM:-}" != "UCRT64" ]; then
+    # We only support building host tools via MINGW64 and UCRT64 environments at the moment,
+    # so enforce that to help users during installation.
+    echo This script must be run from the \"MSYS2 MINGW64\" or \"MSYS2 UCRT64\" shell
+    echo Please open such a shell and run it again from there
+    exit 1
+  fi
+fi
+
+# Check if ccache is installed, and if so, use it
+if command -v ccache &> /dev/null; then
+  export CCACHE=ccache
+fi
+
+makeWithParams(){
+  make -j"${JOBS}" "$@"
+}
+
+sudoMakeWithParams(){
+  make -j"${JOBS}" "$@" || \
+    sudo env N64_INST="$N64_INST" \
+      make -j"${JOBS}" "$@"
+}
+
+# Limit the number of make jobs to the number of CPUs
+JOBS="${JOBS:-$(getconf _NPROCESSORS_ONLN)}"
+JOBS="${JOBS:-1}" # If getconf returned nothing, default to 1
+
+# Clean, build, and install libdragon + tools
+sudoMakeWithParams install-mk
+makeWithParams clobber
+makeWithParams libdragon tools
+sudoMakeWithParams install tools-install
+
+if [ "$TEST_MODE" = true ]; then
+  # Run tests if --test was passed
+  makeWithParams test
+fi
+
+if [ "$BUILD_EXAMPLES" = true ]; then
+  # Build examples - libdragon must be already installed at this point,
+  # so first clobber the build to make sure that everything works against the
+  # installed version rather than using local artifacts.
+  makeWithParams clobber
+  makeWithParams examples
+fi
+
+echo
+echo Libdragon built successfully!

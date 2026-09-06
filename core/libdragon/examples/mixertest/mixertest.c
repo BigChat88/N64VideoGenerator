@@ -1,0 +1,115 @@
+#include <libdragon.h>
+
+// Mixer channel allocation
+#define CHANNEL_SFX1    0
+#define CHANNEL_SFX2    1
+#define CHANNEL_MUSIC   2
+
+int main(void) {
+	debug_init_usblog();
+	debug_init_emulog();
+	joypad_init();
+	display_init(RESOLUTION_512x240, DEPTH_16_BPP, 3, GAMMA_NONE, FILTERS_RESAMPLE);
+
+	int ret = dfs_init(DFS_DEFAULT_LOCATION);
+	assert(ret == DFS_ESUCCESS);
+
+	audio_init(48000, 4);
+	mixer_init(16);  // Initialize up to 16 channels
+
+	// Initialize wav64 compression level 3 as we're going to use it
+	wav64_init_compression(3);
+
+	// Bump maximum frequency of music channel to 128k.
+	// The default is the same of the output frequency (44100), but we want to
+	// let user increase it.
+	mixer_ch_set_limits(CHANNEL_MUSIC, 0, 128000, 0);
+
+	wav64_t *sfx_cannon = wav64_load("rom:/cannon.wav64", NULL);
+	
+	wav64_t *sfx_laser = wav64_load("rom:/laser.wav64", NULL);
+	wav64_set_loop(sfx_laser, true);
+
+	wav64_t *sfx_monosample = wav64_load("rom:/monosample8.wav64", NULL);
+	wav64_set_loop(sfx_monosample, true);
+
+	bool music = false;
+	bool force_mono = false;
+	int music_frequency = sfx_monosample->wave.frequency;
+
+	while (1) {
+		display_context_t disp = display_get();
+		graphics_fill_screen(disp, 0);
+		graphics_draw_text(disp, 200-75, 10, "Audio mixer test");
+		graphics_draw_text(disp, 200-70, 20, "v1.0 - by Rasky");
+		graphics_draw_text(disp, 50, 60, "A - Play cannon");
+		graphics_draw_text(disp, 50, 70, "B - Play laser (keep pressed)");
+		graphics_draw_text(disp, 50, 80, "Z - Start / stop background music");
+		graphics_draw_text(disp, 70, 90, "L/R - Change music frequency");
+		graphics_draw_text(disp, 50, 100, "C-Left / C-Right - Cannon panned hard L/R");
+		graphics_draw_text(disp, 50, 110, "C-Up - Toggle force mono");
+		graphics_draw_text(disp, 50, 120, force_mono ? "Output: MONO" : "Output: STEREO");
+		graphics_draw_text(disp, 50, 140, "Music courtesy of MishtaLu / indiegamemusic.com");
+		display_show(disp);
+
+		joypad_poll();
+		joypad_buttons_t ckeys = joypad_get_buttons_pressed(JOYPAD_PORT_1);
+
+		if (ckeys.a) {
+			wav64_play(sfx_cannon, CHANNEL_SFX1);
+			// Restore centered vol — C-Left/C-Right leave SFX1's
+			// stored vol hard-panned, and mixer_ch_play does not
+			// reset it.
+			mixer_ch_set_vol(CHANNEL_SFX1, 1.0f, 1.0f);
+		}
+		if (ckeys.b) {
+			wav64_play(sfx_laser, CHANNEL_SFX2);
+			mixer_ch_set_vol(CHANNEL_SFX2, 0.25f, 0.25f);
+		}
+		if (ckeys.c_left) {
+			// Hard-pan to the left so the force-mono toggle has an audible
+			// effect: with it off, the cannon only hits the left speaker;
+			// with it on, it splits across both at half amplitude.
+			wav64_play(sfx_cannon, CHANNEL_SFX1);
+			mixer_ch_set_vol(CHANNEL_SFX1, 1.0f, 0.0f);
+		}
+		if (ckeys.c_right) {
+			wav64_play(sfx_cannon, CHANNEL_SFX1);
+			mixer_ch_set_vol(CHANNEL_SFX1, 0.0f, 1.0f);
+		}
+		if (ckeys.c_up) {
+			force_mono = !force_mono;
+			// Global toggle: re-applies the flag across every channel
+			// the mixer currently owns. Voices already playing pick
+			// up the change at the next mixer_poll without restart.
+			mixer_set_force_mono(force_mono);
+		}
+		if (ckeys.z) {
+			music = !music;
+			if (music) {
+				wav64_play(sfx_monosample, CHANNEL_MUSIC);
+				music_frequency = sfx_monosample->wave.frequency;
+			}
+			else
+				mixer_ch_stop(CHANNEL_MUSIC);
+		}
+		if (music && music_frequency >= 8000 && ckeys.l) {
+			music_frequency /= 1.1;
+			mixer_ch_set_freq(CHANNEL_MUSIC, music_frequency);
+		}
+		if (music && music_frequency*1.1 <= 128000 && ckeys.r) {
+			music_frequency *= 1.1;
+			mixer_ch_set_freq(CHANNEL_MUSIC, music_frequency);
+		}
+
+		ckeys = joypad_get_buttons_released(JOYPAD_PORT_1);
+
+		if (ckeys.b) {
+			mixer_ch_stop(CHANNEL_SFX2);
+		}
+
+		// Check whether one audio buffer is ready, otherwise wait for next
+		// frame to perform mixing.
+		mixer_try_play();
+	}
+}

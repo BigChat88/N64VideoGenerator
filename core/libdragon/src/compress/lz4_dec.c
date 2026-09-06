@@ -1,0 +1,183 @@
+/**
+ * @file lz4_dec.c
+ * @author Giovanni Bajo <giovannibajo@gmail.com>
+ */
+#include <stdio.h>
+#include <stdalign.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include "lz4_dec_internal.h"
+#include "ringbuf_internal.h"
+#include "../utils.h"
+#include "../asset_internal.h"
+
+#ifdef N64
+#include <malloc.h>
+#include "debug.h"
+#include "dragonfs.h"
+#include "n64sys.h"
+#endif
+#define MIN_MATCH_SIZE  4      ///< Minimum match size for LZ4.
+#define LITERALS_RUN_LEN 15    ///< Maximum run length for literals in LZ4.
+#define MATCH_RUN_LEN 15       ///< Maximum run length for matches in LZ4.
+
+/// @cond
+#if defined(__GNUC__) || defined(__clang__)
+#define likely(x)       __builtin_expect(!!(x), 1)
+#define unlikely(x)     __builtin_expect(!!(x), 0)
+#else
+#define likely(x)       (x)
+#define unlikely(x)     (x)
+#endif
+/// @endcond
+
+/**
+ * Decompress one data block
+ *
+ * @param pInBlock pointer to compressed data
+ * @param nBlockSize size of compressed data, in bytes
+ * @param pOutData pointer to output decompression buffer (previously decompressed bytes + room for decompressing this block)
+ * @param nBlockMaxSize total size of output decompression buffer, in bytes
+ *
+ * @return size of decompressed data in bytes, or -1 for error
+ */
+#ifdef N64
+ int decompress_lz4_full_inplace(const unsigned char *pInBlock, size_t nBlockSize, unsigned char *pOutData, size_t nBlockMaxSize) {
+   extern int decompress_lz4_full_fast(const void *inbuf, int insize, void *outbuf);
+   return decompress_lz4_full_fast(pInBlock, nBlockSize, pOutData);
+}
+#endif
+
+/**
+ * @brief Fast-access state of the LZ4 algorithm (streaming version).
+ * 
+ * See the LZ4 block format for a better understanding of the fields.
+ */
+typedef struct lz4dec_faststate_s {
+   uint8_t token;       ///< Current token
+   int lit_len;         ///< Number of literals to copy
+   int match_len;       ///< Number of bytes to copy from the ring buffer
+   int match_off;       ///< Offset in the ring buffer to copy from
+   int fsm_state;       ///< Current state of the streaming state machine
+} lz4dec_faststate_t;
+
+/**
+ * @brief State of the LZ4 algorithm (streaming version).
+ */
+typedef struct lz4dec_state_s {
+   uint8_t buf[128] __attribute__((aligned(8)));     ///< File buffer
+   int fd;                          ///< File descriptor to read from
+	int buf_idx;                     ///< Current index in the file buffer
+	int buf_size;                    ///< Size of the file buffer
+   bool eof;                        ///< True if we reached the end of the file
+   lz4dec_faststate_t st;           ///< Fast-access state
+   decompress_ringbuf_t ringbuf;    ///< Ring buffer
+} lz4dec_state_t;
+
+#ifdef N64
+_Static_assert(sizeof(lz4dec_state_t) == DECOMPRESS_LZ4_STATE_SIZE, "decompress_lz4_state_t size mismatch");
+#endif
+
+static void lz4_refill(lz4dec_state_t *lz4)
+{
+   lz4->buf_size = read(lz4->fd, lz4->buf, sizeof(lz4->buf));
+   lz4->buf_idx = 0;
+   lz4->eof = (lz4->buf_size == 0);
+}
+
+static uint8_t lz4_readbyte(lz4dec_state_t *lz4)
+{
+   if (lz4->buf_idx >= lz4->buf_size)
+      lz4_refill(lz4);
+   return lz4->buf[lz4->buf_idx++];
+}
+
+static void lz4_read(lz4dec_state_t *lz4, void *buf, size_t len)
+{
+   while (len > 0) {
+      int n = MIN(len, lz4->buf_size - lz4->buf_idx);
+      memcpy(buf, lz4->buf + lz4->buf_idx, n);
+      buf += n;
+      len -= n;
+      lz4->buf_idx += n;
+      if (lz4->buf_idx >= lz4->buf_size)
+         lz4_refill(lz4);
+   }
+}
+
+void decompress_lz4_init(void *state, int fd, int winsize)
+{
+   lz4dec_state_t *lz4 = (lz4dec_state_t*)state;
+   lz4->fd = fd;
+   __ringbuf_init(&lz4->ringbuf, state+sizeof(lz4dec_state_t), winsize);
+   decompress_lz4_reset(state);
+}
+
+void decompress_lz4_reset(void *state)
+{
+   lz4dec_state_t *lz4 = (lz4dec_state_t*)state;
+   lz4->eof = false;
+   lz4->buf_idx = 0;
+   lz4->buf_size = 0;
+   memset(&lz4->st, 0, sizeof(lz4->st));
+   lz4->ringbuf.ringbuf_pos = 0;
+}
+
+ssize_t decompress_lz4_read(void *state, void *buf, size_t len)
+{
+   lz4dec_state_t *lz4 = (lz4dec_state_t*)state;
+   lz4dec_faststate_t st = lz4->st;
+   void *buf_orig = buf;
+   int n;
+
+   while (!lz4->eof && len > 0) {
+      switch (st.fsm_state) {
+      case 0: // read token
+         st.token = lz4_readbyte(lz4);
+         st.lit_len = ((st.token & 0xf0) >> 4);
+         if (unlikely(st.lit_len == LITERALS_RUN_LEN)) {
+            uint8_t byte;
+            do {
+               byte = lz4_readbyte(lz4);
+               st.lit_len += byte;
+            } while (unlikely(byte == 255));
+         }
+         st.fsm_state = 1;
+      case 1: // literals
+         n = MIN(st.lit_len, len);
+         lz4_read(lz4, buf, n);
+         __ringbuf_write(&lz4->ringbuf, buf, n);
+         buf += n;
+         len -= n;
+         st.lit_len -= n;
+         if (st.lit_len || lz4->eof)
+            break;
+         st.match_off = lz4_readbyte(lz4);
+         st.match_off |= ((uint16_t)lz4_readbyte(lz4)) << 8;
+         st.match_len = (st.token & 0x0f);
+         if (unlikely(st.match_len == MATCH_RUN_LEN)) {
+            uint8_t byte;
+            do {
+               byte = lz4_readbyte(lz4);
+               st.match_len += byte;
+            } while (unlikely(byte == 255));
+         }
+         st.match_len += MIN_MATCH_SIZE;
+         st.fsm_state = 2;
+      case 2: // match
+         n = MIN(st.match_len, len);
+         __ringbuf_copy(&lz4->ringbuf, st.match_off, buf, n);
+         buf += n;
+         len -= n;
+         st.match_len -= n;
+         if (st.match_len)
+            break;
+         st.fsm_state = 0;
+      }
+   }
+
+   lz4->st = st;
+   return buf - buf_orig;
+}

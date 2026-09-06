@@ -1,0 +1,65 @@
+name: Build Desktop Tools (Windows)
+
+# Compila los binarios host nativos que necesita app/ para convertir
+# video -> .z64 sin Docker ni MSYS2 instalados en la maquina del usuario
+# final: mkdfs, n64tool, videoconv64, audioconv64, ed64romconfig.
+#
+# Los cross-compilamos DESDE LINUX con mingw-w64 (corre en ubuntu-latest,
+# sin runner de Windows y sin descargar el toolchain MIPS de libdragon:
+# estas 5 herramientas no dependen de el, ver
+# app/resources/tools/win32-x64/MANIFEST.md para el detalle y el
+# comando equivalente para correrlo a mano con Docker).
+#
+# El .elf del reproductor (resources/rom-assets/) es un build aparte, con
+# el toolchain MIPS completo via Docker: no lo genera este workflow.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/libdragon"
+      - ".github/workflows/build-desktop-tools.yml"
+
+jobs:
+  build-tools-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Install mingw-w64 (posix threads, para std::thread)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            g++-mingw-w64-x86-64 gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+
+      - name: Build host tools
+        working-directory: core/libdragon/tools
+        run: |
+          CC="x86_64-w64-mingw32-gcc -static" \
+          CXX="x86_64-w64-mingw32-g++ -static -static-libgcc -static-libstdc++" \
+          AR="x86_64-w64-mingw32-ar" \
+            make mkdfs n64tool videoconv64 audioconv64 ed64romconfig
+
+      - name: Collect binaries
+        run: |
+          mkdir -p app/resources/tools/win32-x64/bin
+          for tool in mkdfs n64tool videoconv64 audioconv64 ed64romconfig; do
+            find core/libdragon/tools -iname "${tool}.exe" -exec cp {} app/resources/tools/win32-x64/bin/ \;
+          done
+          ls -la app/resources/tools/win32-x64/bin
+
+      - name: Sanity check (run natively... via Wine, ya que el runner es Linux)
+        run: |
+          sudo apt-get install -y -qq --no-install-recommends wine64
+          wine64 app/resources/tools/win32-x64/bin/mkdfs.exe || true
+          wine64 app/resources/tools/win32-x64/bin/videoconv64.exe --help || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-tools-win32-x64
+          path: app/resources/tools/win32-x64/bin/*.exe

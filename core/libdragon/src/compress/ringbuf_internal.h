@@ -1,0 +1,107 @@
+/**
+ * @file ringbuf_internal.h
+ * @author Giovanni Bajo <giovannibajo@gmail.com>
+ */
+#ifndef LIBDRAGON_COMPRESS_RINGBUF_INTERNAL_H
+#define LIBDRAGON_COMPRESS_RINGBUF_INTERNAL_H
+
+#include <stdint.h>
+#include <stdbool.h>
+#include "../utils.h"
+#include "n64types.h"
+
+/**
+ * @brief A ring buffer used for streaming decompression.
+ */
+typedef struct {
+	uint8_t* ringbuf;                       ///< The ring buffer itself
+    unsigned int ringbuf_size;              ///< Size of the ring buffer (power of two)
+	unsigned int ringbuf_pos;               ///< Current write position in the ring buffer
+} decompress_ringbuf_t;
+
+
+/**
+ * @brief Initialize a ring buffer for streaming decompression.
+ *
+ * @param ringbuf       Pointer to the ring buffer structure to initialize.
+ * @param buf           Buffer to use as the ring buffer storage.
+ * @param winsize       Window size (must be a power of 2).
+ */
+void __ringbuf_init(decompress_ringbuf_t *ringbuf, uint8_t *buf, int winsize);
+
+/**
+ * @brief Write a single byte into the ring buffer.
+ * 
+ * @param ringbuf       Pointer to the ring buffer structure.
+ * @param byte          The byte to write.
+ */
+static inline void __ringbuf_writebyte(decompress_ringbuf_t *ringbuf, uint8_t byte)
+{
+    ringbuf->ringbuf[ringbuf->ringbuf_pos++] = byte;
+    ringbuf->ringbuf_pos &= ringbuf->ringbuf_size-1;
+}
+
+/**
+ * @brief Write an array of bytes into the ring buffer.
+ * 
+ * @param ringbuf   The ring buffer to write to.
+ * @param src       The source array to write from.
+ * @param count     The number of bytes to write.
+ */
+void __ringbuf_write(decompress_ringbuf_t *ringbuf, uint8_t *src, int count);
+
+/**
+ * @brief Extract data from the ring buffer, updating it at the same time
+ * 
+ * This function is used to implement a typical match-copy of LZ algorithms.
+ * Given the ring buffer and the position to copy from, it will copy the
+ * specified number of bytes into the destination buffer, while also
+ * updating the ring buffer with the copied data.
+ * 
+ * It correctly handles overlaps, so if copy_offset is 1 and count is 100,
+ * the last character in the ring buffer will be copied 100 times to the
+ * output (and to the ring buffer itself).
+ * 
+ * @param ringbuf               The ring buffer
+ * @param copy_offset           Offset to copy from, relative to the current position.
+ * @param dst                   Destination buffer
+ * @param count                 Number of bytes to copy
+ */
+void __ringbuf_copy(decompress_ringbuf_t *ringbuf, int copy_offset, uint8_t *dst, int count);
+
+/**
+ * @brief A double-buffered lookahead reader used to overlap I/O with decoding.
+ *
+ * It keeps two fixed-size buffers and, on N64 when reading from ROM (rom_base != 0),
+ * it prefetches the "next" buffer via DMA while the caller is consuming the current one.
+ */
+typedef struct {
+    uint8_t buf[2][128] __attribute__((aligned(16)));  ///< Double buffer storage
+    uint8_t cur;            ///< Current buffer index (0/1)
+    uint8_t *ptr;           ///< Read pointer in current buffer
+    uint8_t *end;           ///< End pointer in current buffer
+    int fd;                 ///< File descriptor (used when rom_base == 0)
+    pi_addr_t rom_base;     ///< Base ROM address (0 if not reading from ROM)
+    pi_addr_t rom_addr;     ///< Current ROM address (advanced as we prefetch)
+    uint64_t ticket[2];     ///< DMA ticket for each prefetch buffer (ROM mode only)
+    bool eof;               ///< True if EOF reached (fd mode only)
+} __lookahead_buf_t;
+
+/** @brief Initialize a lookahead buffer */
+void __lookahead_buf_init(__lookahead_buf_t *lb, int fd);
+
+/** @brief Reset lookahead buffer (after caller rewound underlying fd/ROM pointer) */
+void __lookahead_buf_reset(__lookahead_buf_t *lb);
+
+/** @brief Refill lookahead buffer when needed */
+void __lookahead_buf_refill(__lookahead_buf_t *lb);
+
+/** @brief Read one byte from lookahead buffer, refilling when needed */
+static inline uint8_t __lookahead_buf_readbyte(__lookahead_buf_t *lb)
+{
+    if (UNLIKELY(lb->ptr >= lb->end))
+        __lookahead_buf_refill(lb);
+    return *lb->ptr++;
+}
+
+#endif

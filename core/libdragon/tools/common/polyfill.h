@@ -1,0 +1,420 @@
+/*
+    polyfill: mingw32 polyfills for missing C/POSIX functions
+    Written by Giovanni Bajo <giovannibajo@gmail.com>
+
+    This tool is part of the Libdragon SDK.
+
+    This is free and unencumbered software released into the public domain.
+
+    For more information, please refer to <http://unlicense.org/>
+*/
+#ifndef LIBDRAGON_TOOLS_POLYFILL_H
+#define LIBDRAGON_TOOLS_POLYFILL_H
+
+#ifdef __MINGW32__
+
+// NOTE: we include both stdio.h and cstdio because both of them will undef
+// tmpfile and redefine it to something else. Since we want to provide our
+// own implementation, we need to make sure both are included first, so that
+// we don't run the risk either of them is included after this file.
+#include <stdio.h>
+#ifdef __cplusplus
+#include <cstdio>
+#endif
+// NOTE: include both assert.h and cassert because we need to make sure
+// _assert and _wassert are declared properly before we mess with them later.
+#include <assert.h>
+#ifdef __cplusplus
+#include <cassert>
+#endif
+// NOTE: <filesystem> declares std::filesystem::rename() with a 3-argument
+// overload, which cannot be parsed once our own rename() macro (see below) is
+// defined. Include it upfront so that this header can be included anywhere,
+// even before <filesystem> itself. As a consequence, std::filesystem::rename()
+// cannot be called by tools; use the C rename() instead.
+#ifdef __cplusplus
+#include <filesystem>
+#endif
+#include <stdlib.h>
+#include <errno.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+#include <process.h>
+#include <share.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <time.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// if typedef doesn't exist (msvc, blah)
+typedef intptr_t ssize_t;
+
+/* Implementation of 'getline' fetched from: https://stackoverflow.com/a/47229318 */
+/* The original code is public domain -- Will Hartung 4/9/09 */
+/* Modifications, public domain as well, by Antti Haapala, 11/10/17
+   - Switched to getc on 5/23/19 */
+__attribute__((used))
+static ssize_t getline(char **lineptr, size_t *n, FILE *stream) {
+    size_t pos;
+    int c;
+
+    if (lineptr == NULL || stream == NULL || n == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    c = getc(stream);
+    if (c == EOF) {
+        return -1;
+    }
+
+    if (*lineptr == NULL) {
+        *lineptr = (char*)malloc(128);
+        if (*lineptr == NULL) {
+            return -1;
+        }
+        *n = 128;
+    }
+
+    pos = 0;
+    while(c != EOF) {
+        if (pos + 1 >= *n) {
+            size_t new_size = *n + (*n >> 2);
+            if (new_size < 128) {
+                new_size = 128;
+            }
+            char *new_ptr = (char*)realloc(*lineptr, new_size);
+            if (new_ptr == NULL) {
+                return -1;
+            }
+            *n = new_size;
+            *lineptr = new_ptr;
+        }
+
+        ((unsigned char *)(*lineptr))[pos ++] = c;
+        if (c == '\n') {
+            break;
+        }
+        c = getc(stream);
+    }
+
+    (*lineptr)[pos] = '\0';
+    return pos;
+}
+
+// Provide implementation of strndup for MSYS2 environments that are missing it (before April 13 2026).
+#if defined(MSYS2_RUNTIME_PACMAN_AGE) && MSYS2_RUNTIME_PACMAN_AGE <= 20260413
+__attribute__((used))
+static char *msys2_fallback_strndup(const char *s, size_t n)
+{
+    size_t len = strnlen(s, n);
+    char *ret = (char*)malloc(len + 1);
+    if (!ret) return NULL;
+    memcpy(ret, s, len);
+    ret[len] = '\0';
+    return ret;
+}
+
+    #ifdef strndup
+    #undef strndup
+    #endif
+    #define strndup   msys2_fallback_strndup
+#endif
+
+// Replace 'assert' so that it has 'noreturn' behaviour on Windows.
+// (soft reverts this MSYS2 commit: https://sourceforge.net/p/mingw-w64/mingw-w64/ci/ecf2328a328d11dec7044b40b2b5e93b5b2b9d9e/)
+#if defined(MSYS2_RUNTIME_PACMAN_AGE) && MSYS2_RUNTIME_PACMAN_AGE >= 20260611 && !defined(NDEBUG)
+
+    #if defined(_UNICODE) || defined(UNICODE)
+
+__attribute__((used)) __attribute__((noreturn))
+static void msys2_wassert_fix(const wchar_t* _Message, const wchar_t* _File, unsigned _Line)
+{
+    _wassert(_Message, _File, _Line);
+    abort();
+    __builtin_unreachable();
+}
+
+#define _wassert(a,b,c) msys2_wassert_fix(a,b,c)
+
+    #else
+
+__attribute__((used)) __attribute__((noreturn))
+static void msys2_assert_fix(const char* _Message, const char* _File, unsigned _Line)
+{
+    _assert(_Message, _File, _Line);
+    abort();
+    __builtin_unreachable();
+}
+
+#define _assert(a,b,c) msys2_assert_fix(a,b,c)
+
+    #endif // defined(_UNICODE) || defined(UNICODE)
+
+#endif
+
+#if defined(__MSVCRT_VERSION__) && __MSVCRT_VERSION__ >= 0xE00
+    // UCRT is being used so we can use runtime-provided tmpfile() implementation
+#else
+    // tmpfile() in MINGW64 is broken for use (it uses MSVCRT that tries to
+    // create a file in C:\, which is non-writable nowadays)
+    #ifdef tmpfile
+    #undef tmpfile
+    #endif
+    #define tmpfile()   mingw_tmpfile()
+#endif
+
+typedef void* HANDLE;
+typedef const char* LPCSTR;
+typedef int BOOL;
+#define INVALID_HANDLE_VALUE ((HANDLE)(long)-1)
+struct _SECURITY_ATTRIBUTES;
+
+// Access rights
+#define GENERIC_READ        0x80000000
+#define GENERIC_WRITE       0x40000000
+
+// Share modes
+#define FILE_SHARE_READ     0x00000001
+#define FILE_SHARE_WRITE    0x00000002
+#define FILE_SHARE_DELETE   0x00000004
+
+// Creation disposition
+#define CREATE_NEW          1
+
+// Flags and attributes
+#define FILE_ATTRIBUTE_TEMPORARY     0x00000100
+#define FILE_FLAG_DELETE_ON_CLOSE    0x04000000
+
+__declspec(dllimport) HANDLE __stdcall CreateFileA(
+    LPCSTR lpFileName,
+    unsigned long dwDesiredAccess,
+    unsigned long dwShareMode,
+    struct _SECURITY_ATTRIBUTES* lpSecurityAttributes,
+    unsigned long dwCreationDisposition,
+    unsigned long dwFlagsAndAttributes,
+    HANDLE hTemplateFile
+);
+__declspec(dllimport) int __stdcall CloseHandle(HANDLE);
+__declspec(dllimport) unsigned long __stdcall GetLastError(void);
+__declspec(dllimport) unsigned long __stdcall GetTickCount(void);
+
+__attribute__((used))
+static FILE *mingw_tmpfile(void) {
+    static int counter = 0;
+    char path[260];
+
+    for (int i = 0; i < 4096; i++) {
+        // Generate a random filename. Notice we *purposedly* not make this
+        // very random with PID, timestamp, etc. because this is the third
+        // iteration of mingw_tmpfile(): the previous ones were misbehaving
+        // in various ways on various CRTs, Windows versions, etc. 
+        // We want this code to be exercised often so that it is robust.
+        snprintf(path, sizeof(path), "mksprite-%04x.tmp", counter++);
+
+        HANDLE h = CreateFileA(
+            path,
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            NULL,
+            CREATE_NEW,
+            FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE,
+            NULL
+        );
+
+        if (h != INVALID_HANDLE_VALUE) {
+            int fd = _open_osfhandle((intptr_t)h, _O_RDWR | _O_BINARY);
+            if (fd == -1) {
+                CloseHandle(h);
+                return NULL;
+            }
+            return fdopen(fd, "w+b");
+        }
+
+        // 80 = ERROR_FILE_EXISTS
+        if (GetLastError() != 80)
+            break;
+    }
+
+    return NULL;
+}
+
+__attribute__((used))
+static char* strcasestr(const char* haystack, const char* needle)
+{
+    size_t needle_len = strlen(needle);
+    size_t haystack_len = strlen(haystack);
+    size_t i;
+
+    if (needle_len > haystack_len)
+        return NULL;
+
+    for (i = 0; i <= haystack_len - needle_len; i++)
+    {
+        if (strncasecmp(haystack + i, needle, needle_len) == 0)
+            return (char*)(haystack + i);
+    }
+
+    return NULL;
+}
+
+// Implementation from FreeBSD
+__attribute__((used))
+static void *memmem(const void *l, size_t l_len, const void *s, size_t s_len)
+{
+	char *cur, *last;
+	const char *cl = (const char *)l;
+	const char *cs = (const char *)s;
+
+	/* we need something to compare */
+	if (l_len == 0 || s_len == 0)
+		return NULL;
+
+	/* "s" must be smaller or equal to "l" */
+	if (l_len < s_len)
+		return NULL;
+
+	/* special case where s_len == 1 */
+	if (s_len == 1)
+		return (void*) memchr(l, (int)*cs, l_len);
+
+	/* the last position where its possible to find "s" in "l" */
+	last = (char *)cl + l_len - s_len;
+
+	for (cur = (char *)cl; cur <= last; cur++)
+		if (cur[0] == cs[0] && memcmp(cur, cs, s_len) == 0)
+			return cur;
+
+	return NULL;
+}
+
+// rename() that ovewrites the destination file
+#define rename(a,b)  mingw_rename(a,b)
+
+#define MOVEFILE_REPLACE_EXISTING 0x00000001
+#define MOVEFILE_WRITE_THROUGH    0x00000008
+
+__declspec(dllimport) int __stdcall MoveFileExA(const char *lpExistingFileName,
+                                                const char *lpNewFileName,
+                                                unsigned long dwFlags);
+__declspec(dllimport) unsigned long __stdcall GetLastError(void);
+
+static void map_windows_error_to_errno(unsigned long err) {
+    switch (err) {
+        case 2:    errno = ENOENT; break;        // ERROR_FILE_NOT_FOUND
+        case 3:    errno = ENOENT; break;        // ERROR_PATH_NOT_FOUND
+        case 5:    errno = EACCES; break;        // ERROR_ACCESS_DENIED
+        case 32:   errno = EBUSY; break;         // ERROR_SHARING_VIOLATION
+        case 80:   errno = EEXIST; break;        // ERROR_FILE_EXISTS
+        case 183:  errno = EEXIST; break;        // ERROR_ALREADY_EXISTS
+        default:   errno = EIO; break;           // Generic error
+    }
+}
+
+__attribute__((used))
+static int mingw_rename(const char *oldpath, const char *newpath) {
+    if (MoveFileExA(oldpath, newpath, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        return 0;
+    } else {
+        map_windows_error_to_errno(GetLastError());
+        return -1;
+    }
+}
+
+// POISX mkdir has a mode argument, but mingw's mkdir doesn't
+#define mkdir(path, mode) mkdir(path)
+
+typedef struct _PROCESS_BASIC_INFORMATION_MIN {
+    void* Reserved1;
+    void* PebBaseAddress;
+    void* Reserved2[2];
+    void* UniqueProcessId;
+    void* InheritedFromUniqueProcessId;
+} PROCESS_BASIC_INFORMATION_MIN;
+
+#define CURRENT_PROCESS ((HANDLE)(intptr_t)-1)
+
+__declspec(dllimport) long __stdcall NtQueryInformationProcess(
+    HANDLE ProcessHandle, unsigned long ProcessInformationClass,
+    void* ProcessInformation, unsigned long ProcessInformationLength,
+    unsigned long *ReturnLength);
+
+// Enable long path support in the current process.
+// This is a hacky workaround for a limitation in Windows where
+// file paths longer than 260 characters are not supported.
+// The documented ways involve also setting a registry key, and thus
+// is not suitable for a tool like this.
+// This same approach is used by the Go runtime on Windows, so it is
+// reasonably safe to use it here as well.
+__attribute__((used))
+static void enable_peb_long_path_unsafe(void)
+{
+    PROCESS_BASIC_INFORMATION_MIN pbi; unsigned long retlen;
+    if (NtQueryInformationProcess(CURRENT_PROCESS, 0, &pbi, sizeof(pbi), &retlen) < 0)
+        return;
+    volatile uint8_t *peb = (volatile uint8_t*)pbi.PebBaseAddress;
+    enum { PEB_BITFIELD_OFFSET = 3, IS_LONG_PATH_AWARE_MASK = 0x80 };
+    peb[PEB_BITFIELD_OFFSET] |= (uint8_t)IS_LONG_PATH_AWARE_MASK;
+}
+
+// If it was defined, undefine it as there's no limit on path length after the hack above
+#undef MAX_PATH
+
+__declspec(dllimport) int __stdcall SetConsoleOutputCP(unsigned int);
+__declspec(dllimport) int __stdcall SetConsoleCP(unsigned int);
+__declspec(dllimport) unsigned int __stdcall GetConsoleOutputCP(void);
+__declspec(dllimport) unsigned int __stdcall GetConsoleCP(void);
+#define CP_UTF8 65001
+
+static int old_out_cp = 0;
+static int old_in_cp = 0;
+
+__attribute__((used))
+static void winconsole_restore(void) {
+    if (old_out_cp)
+        SetConsoleOutputCP(old_out_cp);
+    if (old_in_cp)
+        SetConsoleCP(old_in_cp);
+}
+
+__attribute__((used))
+static void winconsole_utf8(void) {
+    // Enable long path support in the current process
+    enable_peb_long_path_unsafe();
+
+    // Save the current code page
+    old_out_cp = GetConsoleOutputCP();
+    old_in_cp = GetConsoleCP();
+
+    // Enable UTF-8 in the console
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
+    atexit(winconsole_restore);
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+
+#else /* __MINGW32__ */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+__attribute__((used))
+static void winconsole_utf8(void) {}
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __MINGW32__ */
+
+#endif

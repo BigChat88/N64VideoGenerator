@@ -1,0 +1,21 @@
+{
+    "configurations": [
+        {
+            "name": "N64 (libdragon)",
+            "includePath": [
+                "${workspaceFolder}/core/src/**",
+                "${workspaceFolder}/core/libdragon/include",
+                "${workspaceFolder}/core/libdragon/include/**",
+                "${workspaceFolder}/core/libdragon/src/**"
+            ],
+            "defines": [
+                "LIBDRAGON_PREVIEW=2",
+                "N64"
+            ],
+            "cStandard": "gnu11",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}

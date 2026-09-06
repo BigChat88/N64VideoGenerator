@@ -1,0 +1,12 @@
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+*.swp
+*.swo
+*~
+*.log
+node_modules/
+dist/
+build/
+*.z64
