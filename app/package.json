@@ -1,6 +1,6 @@
 {
   "name": "n64-video-generator-desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Turns a video (mp4, etc.) into a playable N64 .z64 ROM, with a cross-platform desktop interface.",
   "private": true,
   "author": "Felipe <felipe0604@gmail.com>",
