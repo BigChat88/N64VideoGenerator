@@ -1,59 +1,58 @@
 # N64 Video Generator
 
-Turns a video file (mp4, etc.) into a playable Nintendo 64 ROM (`.z64`) that
-plays it back with audio, using [libdragon](https://github.com/DragonMinded/libdragon)'s
-video (MPEG-1 / H.264) and audio decoding APIs. The ROM runs on real N64
-hardware (e.g. via an EverDrive64) or in an emulator.
+## What it does
 
-The project is split into two independent parts:
+Turns an ordinary video file into a
+**playable Nintendo 64 ROM** that plays that video back with sound on real N64
+hardware (e.g. through an EverDrive64 / SummerCart64) or in any N64 emulator.
 
-```
-core/  N64 firmware + the video/ROM conversion toolchain
-app/   Electron GUI that wraps the same conversion pipeline
-```
+It does this by reusing [libdragon](https://github.com/DragonMinded/libdragon)'s
+video (MPEG-1 / H.264) and audio decoding APIs: a small, generic player program
+is compiled once for the N64, and each conversion only re-packs your video into
+a fresh ROM alongside that player.
 
-## [`core/`](core)
+## What it generates
 
-The N64 side: a small libdragon program ([src/main.c](core/src/main.c)) that
-plays back whatever video/audio was packed into the ROM's filesystem, plus
-the `Makefile` that drives the full pipeline end to end:
+A single **`.z64` ROM file** at the location you choose. That file is the whole
+deliverable: it embeds the video, the audio and the player, and needs nothing
+else to run.
 
-1. `videoconv64` transcodes an input video into MPEG-1 or H.264 + audio
-   (`.m1v`/`.h264`, `.wav64`, `.seek`).
-2. `mkdfs` packs those files into the ROM's embedded filesystem (`.dfs`).
-3. `n64tool` links the precompiled player `.elf` with the `.dfs` into a
-   `.z64` ROM.
+Encoding is configurable: video codec (MPEG-1 or H.264), quality (0–100),
+quick vs. quality encoding, target FPS, seek interval, audio compression
+(VADPCM / Opus / ULC / uncompressed), sample rate (max **32000 Hz** — the
+precompiled player is fixed at that rate), mono/stereo, plus advanced encoding
+profile and quantization matrix.
 
-This requires the full libdragon MIPS toolchain (`N64_INST`) to build the
-player `.elf` — see [libdragon's install docs](https://github.com/DragonMinded/libdragon/wiki).
-`core/libdragon` is a git submodule; run `git submodule update --init --recursive`
-after cloning.
+---
 
-```bash
-cd core
-make                
-```
+## Desktop application
 
-## [`app/`](app)
+### How to run it (end user)
 
-A cross-platform Electron app that runs the *same* conversion pipeline
-through a desktop UI, without requiring the end user to install Docker or
-the libdragon MIPS toolchain. The player `.elf` is compiled once (from
-`core/src/main.c`) and committed as a prebuilt artifact
-([resources/rom-assets](app/resources/rom-assets)); the app only
-needs the host-native `videoconv64`/`mkdfs`/`n64tool`/`ed64romconfig` binaries
-(bundled per-platform) plus `ffmpeg`/`ffprobe` to convert a video end to end.
-See [app/README.md](app/README.md) for details, current
-status, and how to run it in development.
+Download a build from the project's GitHub Releases and run it:
 
-```bash
-cd app
-npm install
-npm run dev
-```
+| Artifact | How to use |
+|---|---|
+| `N64VideoGenerator-<version>-portable.exe` | Run directly, no installation. |
+| `N64 Video Generator Setup <version>.exe` | Installer (Start Menu shortcut, uninstaller). |
 
-# AI Note 
+Then: pick an input video → set a ROM title → adjust options if you want →
+**Convert to .z64** → choose where to save the ROM.
 
-The application was developed using AI. I’m just an enthusiast who wanted to
-generate videos on the N64. In this case, the means used to achieve it are not 
+### What it requires (end user)
+
+- **Windows 10/11, 64-bit.** The native conversion tools are currently only
+  bundled for `win32-x64`. On macOS/Linux the app falls back to a libdragon
+  Docker container (development only) or a local `N64_INST` toolchain.
+- **`ffmpeg` and `ffprobe` on your `PATH`.** They are *not* bundled yet (the
+  H.264 path needs a GPL `libx264` build — licensing decision pending), so
+  install a recent FFmpeg and make sure `ffmpeg -version` works in a terminal.
+- Everything else — the N64 player `.elf`, `videoconv64`, `mkdfs`, `n64tool`,
+  `ed64romconfig`, `audioconv64` — ships inside the app under
+  [`resources/`](app/resources).
+
+# AI Note
+
+The application was developed using AI. I'm just an enthusiast who wanted to
+generate videos on the N64. In this case, the means used to achieve it are not
 relevant to me.

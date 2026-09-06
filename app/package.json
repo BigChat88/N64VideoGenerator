@@ -30,12 +30,22 @@
       "output": "release"
     },
     "files": [
-      "dist/**/*",
-      "resources/rom-assets/**/*",
-      "resources/tools/**/*"
+      "dist/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      }
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "portable": {
+      "artifactName": "N64VideoGenerator-${version}-portable.exe"
     },
     "publish": null
   },
