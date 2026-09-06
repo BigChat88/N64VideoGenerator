@@ -32,7 +32,7 @@ runs by hand today.
       distribution to the GPL. See the details in the MANIFEST above. Until
       this is decided, the app depends on the user already having `ffmpeg`/`ffprobe`
       on their PATH (`tools-path.ts` falls back to that automatically).
-- [ ] **Pending**: `electron-builder` (NSIS installer).
+- [x] `electron-builder` packaging: produces a portable `.exe` (`npm run dist`).
 - [ ] macOS / Linux: repeat the same, the pipeline (`convert.ts`) does not change.
       The same trick of cross-compiling with Docker should work (mingw-w64
       only applies to Windows; for macOS you have to compile on a macOS

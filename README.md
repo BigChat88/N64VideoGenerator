@@ -23,23 +23,18 @@ quick vs. quality encoding, target FPS, seek interval, audio compression
 precompiled player is fixed at that rate), mono/stereo, plus advanced encoding
 profile and quantization matrix.
 
----
-
 ## Desktop application
 
-### How to run it (end user)
+### How to run it
 
-Download a build from the project's GitHub Releases and run it:
-
-| Artifact | How to use |
-|---|---|
-| `N64VideoGenerator-<version>-portable.exe` | Run directly, no installation. |
-| `N64 Video Generator Setup <version>.exe` | Installer (Start Menu shortcut, uninstaller). |
+Download `N64VideoGenerator-<version>-portable.exe` from the project's GitHub
+Releases and run it directly — it is a portable executable, no installation
+required.
 
 Then: pick an input video → set a ROM title → adjust options if you want →
 **Convert to .z64** → choose where to save the ROM.
 
-### What it requires (end user)
+### What it requires 
 
 - **Windows 10/11, 64-bit.** The native conversion tools are currently only
   bundled for `win32-x64`. On macOS/Linux the app falls back to a libdragon
@@ -47,9 +42,20 @@ Then: pick an input video → set a ROM title → adjust options if you want →
 - **`ffmpeg` and `ffprobe` on your `PATH`.** They are *not* bundled yet (the
   H.264 path needs a GPL `libx264` build — licensing decision pending), so
   install a recent FFmpeg and make sure `ffmpeg -version` works in a terminal.
-- Everything else — the N64 player `.elf`, `videoconv64`, `mkdfs`, `n64tool`,
-  `ed64romconfig`, `audioconv64` — ships inside the app under
-  [`resources/`](app/resources).
+
+  **Installing FFmpeg on Windows:**
+  - Easiest, with a package manager (run in PowerShell/Terminal):
+    - `winget install Gyan.FFmpeg` &nbsp;— or —&nbsp; `choco install ffmpeg-full`
+    - Open a **new** terminal afterwards so the updated `PATH` takes effect.
+  - Manual: download a build from
+    [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) (get "ffmpeg-release-full")
+    or [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases),
+    unzip it somewhere permanent (e.g. `C:\ffmpeg`), then add the `bin` folder
+    (`C:\ffmpeg\bin`, the one containing `ffmpeg.exe` and `ffprobe.exe`) to your
+    `PATH`: *Start → "Edit the system environment variables" → Environment
+    Variables → select `Path` → Edit → New*.
+  - Verify: open a new terminal and run `ffmpeg -version` and `ffprobe -version`.
+
 
 # AI Note
 
