@@ -98,11 +98,6 @@ static void video_osd_callback(void *ctx, int frame_idx, float time_sec, fmv_con
  * 
  */
 static void wait_for_replay(resolution_t video_res) {
-    // Use the exact same display resolution / aspect ratio fmv_play() used for
-    // playback, so the replay screen shares the video's coordinate space and VI
-    // scaling. That makes the play icon land at the same on-screen height and
-    // size as the pause icon (both are PAUSE_BAR_H tall and sit PAUSE_BOTTOM_MARGIN
-    // above the bottom edge).
     display_init(video_res, DEPTH_32_BPP, 2, GAMMA_NONE, FILTERS_RESAMPLE);
 
     const uint32_t white = graphics_make_color(255, 255, 255, 255);
@@ -143,8 +138,6 @@ int main(void) {
 
     const char *video_fn = find_video_filename();
 
-    // Probe the video once for its resolution / aspect ratio: fmv_play() sets the
-    // display to these values, and wait_for_replay() must match them (see there).
     video_t *probe = video_open(video_fn, &(video_parms_t){ .buffered_pics = 1 });
     video_info_t vinfo = video_get_info(probe);
     video_close(probe);

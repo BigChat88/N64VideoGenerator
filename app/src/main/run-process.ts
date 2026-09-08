@@ -1,8 +1,3 @@
-// Small helper to run a command, streaming each stdout/stderr line exactly as
-// the tool emits it (without reinterpreting it) and rejecting the promise if
-// the process exits with a non-zero code. Every tool in the pipeline
-// (videoconv64, mkdfs, n64tool, ed64romconfig, docker) uses this.
-
 import { spawn } from "node:child_process";
 
 export interface RunResult {

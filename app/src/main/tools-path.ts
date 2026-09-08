@@ -1,21 +1,3 @@
-// Resolves where the native tools that the conversion pipeline needs live:
-// ffmpeg, ffprobe, videoconv64, audioconv64 (used internally by videoconv64),
-// mkdfs, n64tool and ed64romconfig.
-//
-// Resolution order (most to least preferred):
-//   1. Binaries bundled in resources/tools/<platform>-<arch>/ — what the app
-//      installed by an end user will use (see plan: "bundle precompiled
-//      binaries").
-//   2. Binaries already installed on the system (PATH, or $N64_INST/bin) —
-//      handy for developers who already have the native libdragon toolchain
-//      (same as this repo's Makefile).
-//   3. The libdragon Docker container (ghcr.io/dragonminded/libdragon), if
-//      available — ONLY for development/testing on this machine while no
-//      bundled native .exe binaries exist (see
-//      .github/workflows/build-desktop-tools.yml, which is what produces
-//      mode 1 for real releases). This mode must not be used in the app
-//      distributed to end users.
-
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -36,17 +18,10 @@ export type ToolMode =
 const DOCKER_IMAGE = "ghcr.io/dragonminded/libdragon:latest";
 
 function platformDir(): string {
-  // electron-builder / Node already normalize this to "win32", "darwin", "linux".
-  const arch = process.arch; // "x64", "arm64", ...
+  const arch = process.arch; 
   return `${process.platform}-${arch}`;
 }
 
-// videoconv64 has no flag to say where audioconv64 is: it always looks for it
-// at "$N64_INST/bin/audioconv64(.exe)" (see
-// core/libdragon/tools/videoconv64/vconv_audio.cpp, audioconv64_path()). That
-// is why we bundle the binaries under tools/<platform-arch>/bin/, mimicking
-// the layout of a real N64_INST, and set that environment variable when
-// invoking it (see convert.ts).
 function bundledRoot(resourcesRoot: string): string {
   return join(resourcesRoot, "tools", platformDir());
 }

@@ -15,6 +15,14 @@ does not depend on the input video, only on the chosen codec. So it is compiled
 (+ `ed64romconfig`), exactly the same steps [../core/Makefile](../core/Makefile)
 runs by hand today.
 
+Before `videoconv64`, `convert.ts` probes the source with `ffprobe`: if it has
+no audio stream — or the user picked **Audio → No audio (silent ROM)** — it
+remuxes a copy with a silent stereo track the length of the video (ffmpeg
+`anullsrc` + `-shortest`, video stream-copied; the remux drops any real source
+audio). `fmv_play()` uses audio as its master clock, so without this a silent
+video has no playback pacing reference and can drift on real hardware. Only if
+that remux fails does "No audio" fall back to `videoconv64 --no-audio`.
+
 ## Current status / what's left for a real release
 
 - [x] `core/src/main.c` generalized to support MPEG-1 and H.264 in the same `.elf`.

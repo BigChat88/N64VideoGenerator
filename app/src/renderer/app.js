@@ -1,18 +1,8 @@
-// Simple framework-less UI: it just gathers the form options 1:1 with the
-// fields of ConvertOptions (see src/main/types.ts) and calls the API exposed
-// by the preload.
-
 const $ = (id) => document.getElementById(id);
-
-// The precompiled player (src/main.c) initializes audio at this fixed rate
-// (AUDIO_HZ) and the libdragon mixer refuses (hard assert on real hardware)
-// to play a wav64 encoded above that. It is not negotiable per conversion:
-// the .elf is already compiled, so the UI must not allow asking for more.
 const MAX_AUDIO_SAMPLE_RATE = 32000;
 
 let inputPath = null;
 
-// "C:\videos\My Trip.final.mp4" -> "My Trip.final"
 function baseNameWithoutExt(p) {
   const base = p.split(/[\\/]/).pop() || "";
   const dot = base.lastIndexOf(".");
@@ -24,7 +14,6 @@ $("btnPickInput").addEventListener("click", async () => {
   if (path) {
     inputPath = path;
     $("inputPath").value = path;
-    // Prefill the ROM title from the file name (n64tool caps it at 20 chars).
     const title = baseNameWithoutExt(path).slice(0, 20);
     if (title) $("romTitle").value = title;
   }
@@ -34,17 +23,17 @@ $("quality").addEventListener("input", () => {
   $("qualityValue").textContent = $("quality").value;
 });
 
-// Opus always forces 48000 Hz (see conv_wav64.cpp: OPUS_SAMPLE_RATE), no
-// matter what is requested here: the player already knows how to raise the
-// mixer limit to accept it (see src/main.c), but the field itself has no
-// effect with Opus, so we disable it to avoid confusion.
-function updateAudioRateFieldForCodec() {
+function updateAudioFieldsState() {
+  const noAudio = !$("audioEnabled").checked;
   const isOpus = $("audioCompress").value === "opus";
-  $("audioSampleRate").disabled = isOpus;
-  $("opusRateNote").hidden = !isOpus;
+  $("audioCompress").disabled = noAudio;
+  $("audioChannels").disabled = noAudio;
+  $("audioSampleRate").disabled = noAudio || isOpus;
+  $("opusRateNote").hidden = noAudio || !isOpus;
 }
-$("audioCompress").addEventListener("change", updateAudioRateFieldForCodec);
-updateAudioRateFieldForCodec();
+$("audioEnabled").addEventListener("change", updateAudioFieldsState);
+$("audioCompress").addEventListener("change", updateAudioFieldsState);
+updateAudioFieldsState();
 
 function collectOptions(outputPath) {
   return {
@@ -55,6 +44,7 @@ function collectOptions(outputPath) {
     quality: Number($("quality").value),
     speed: $("quick").checked ? "quick" : "quality",
     seekIntervalSec: $("seekIntervalSec").value ? Number($("seekIntervalSec").value) : undefined,
+    audioMode: $("audioEnabled").checked ? "source" : "none",
     audioCompress: $("audioCompress").value,
     audioSampleRate: Number($("audioSampleRate").value),
     audioChannels: Number($("audioChannels").value),
@@ -69,11 +59,8 @@ function appendLog(line) {
   log.scrollTop = log.scrollHeight;
 }
 
-// The bar is driven by two signals: the discrete pipeline stages (see
-// convert.ts), which set a floor as each one starts, and the per-frame
-// percentage that videoconv64 prints on stderr during the longest stage, which
-// we map into that stage's span so the bar actually moves while encoding.
 const STAGE_FLOOR = {
+  probe: 1,
   videoconv64: 3,
   mkdfs: 91,
   n64tool: 95,
@@ -81,13 +68,11 @@ const STAGE_FLOOR = {
   done: 100,
 };
 
-// Sub-spans within the videoconv64 stage: it sweeps 0..100% once for the video
-// encode (the bulk of the time), then again for the audio bridge.
 const VIDEO_SPAN = [3, 78];
 const AUDIO_SPAN = [78, 88];
 
 let currentStage = null;
-let shownPct = 0; // the bar never moves backwards during a run
+let shownPct = 0; 
 
 function setProgress(pct) {
   const clamped = Math.max(0, Math.min(100, pct));
@@ -103,10 +88,6 @@ function resetProgress() {
   $("progressPct").textContent = "0%";
 }
 
-// videoconv64 redraws its progress bar with a bare "\r" (no newline), so a
-// single captured chunk can hold several updates, e.g.
-//   "\rVideo [##------]  17.0%\rVideo [####----]  42.3% ETA 01:12"
-// Take the last percentage in the chunk.
 function progressFromLogLine(line) {
   const re = /(Video\/Audio|Video|Audio)\s*\[[#-]*\]\s*([\d.]+)\s*%/g;
   let m;
@@ -170,7 +151,7 @@ $("btnConvert").addEventListener("click", async () => {
     return;
   }
   const sampleRate = Number($("audioSampleRate").value);
-  if (sampleRate > MAX_AUDIO_SAMPLE_RATE) {
+  if ($("audioEnabled").checked && sampleRate > MAX_AUDIO_SAMPLE_RATE) {
     alert(
       `The audio sample rate (${sampleRate} Hz) exceeds the maximum the ` +
         `player supports (${MAX_AUDIO_SAMPLE_RATE} Hz). Lower it before converting: ` +

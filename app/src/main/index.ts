@@ -3,9 +3,6 @@ import { join } from "node:path";
 import { convertVideoToZ64 } from "./convert";
 import { ConvertOptions, ProgressEvent } from "./types";
 
-// In dev, resources/ lives next to the project. When packaged, electron-builder
-// copies the "resources" folder declared in package.json#build.files into
-// process.resourcesPath.
 function getResourcesRoot(): string {
   return app.isPackaged ? join(process.resourcesPath, "resources") : join(__dirname, "..", "..", "resources");
 }
