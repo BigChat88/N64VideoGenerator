@@ -57,8 +57,12 @@ Then: pick an input video → set a ROM title → adjust options if you want →
   - Verify: open a new terminal and run `ffmpeg -version` and `ffprobe -version`.
 
 
+## Acknowledgements
+
+Thanks to the **[libdragon](https://github.com/DragonMinded/libdragon)**
+team for the open-source N64 SDK, and to id Software / JAMDAT / EA for the
+original 2005 game.
+
 # AI Note
 
-The application was developed using AI. I'm just an enthusiast who wanted to
-generate videos on the N64. In this case, the means used to achieve it are not
-relevant to me.
+The application was developed using AI. I'm just an enthusiast who wanted to create interesting projects. In this case, how it was achieved is not relevant to me.
