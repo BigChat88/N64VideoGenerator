@@ -1,12 +1,13 @@
 name: Release Desktop App
 
-# On every push to main, build the Electron app in app/ and publish a
-# GitHub Release with the compiled, ready-to-download portable .exe attached.
+# On every push to main, build the Electron app in app/ for Windows, Linux
+# and macOS (Intel), and publish a single GitHub Release with all three
+# ready-to-download builds attached.
 #
-# The app build is self-contained: it only needs app/ (the prebuilt player
-# .elf and native host tools are already committed under app/resources/),
-# so this workflow does NOT check out the libdragon submodule or touch the
-# MIPS toolchain.
+# Each build is self-contained: it only needs app/ (the prebuilt player .elf
+# and native host tools are already committed under app/resources/), so this
+# workflow does NOT check out the libdragon submodule or touch the MIPS
+# toolchain.
 
 on:
   workflow_dispatch:
@@ -24,8 +25,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: windows-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            artifact-glob: app/release/*.exe
+          - os: ubuntu-latest
+            platform: linux
+            artifact-glob: app/release/*.AppImage
+          - os: macos-13
+            platform: mac
+            artifact-glob: app/release/*.zip
+
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: app
@@ -44,20 +59,45 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Read app version
-        id: ver
-        shell: bash
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Build portable app (electron-builder)
+      - name: Build app (electron-builder)
         run: npm run dist
         env:
-          # electron-builder: do not auto-publish, we attach the files below.
+          # electron-builder: do not auto-publish, the publish job attaches
+          # the files below to a single release instead.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No Apple Developer certificate available: skip code signing
+          # instead of electron-builder trying (and failing) to find one.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: List build output
         shell: bash
         run: ls -la release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: ${{ matrix.artifact-glob }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read app version
+        id: ver
+        run: echo "version=$(node -p "require('./app/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist-artifacts
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: ls -la dist-artifacts
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -66,5 +106,4 @@ jobs:
           name: N64 Video Generator v${{ steps.ver.outputs.version }} (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
-          files: |
-            app/release/*.exe
+          files: dist-artifacts/*

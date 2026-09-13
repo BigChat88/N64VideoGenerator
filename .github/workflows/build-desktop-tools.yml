@@ -1,17 +1,21 @@
-name: Build Desktop Tools (Windows)
+name: Build Desktop Tools
 
-# Compila los binarios host nativos que necesita app/ para convertir
-# video -> .z64 sin Docker ni MSYS2 instalados en la maquina del usuario
-# final: mkdfs, n64tool, videoconv64, audioconv64, ed64romconfig.
+# Builds the native host binaries that app/ needs to convert video -> .z64
+# without Docker or a local N64_INST toolchain installed on the end user's
+# machine: mkdfs, n64tool, videoconv64, audioconv64, ed64romconfig.
 #
-# Los cross-compilamos DESDE LINUX con mingw-w64 (corre en ubuntu-latest,
-# sin runner de Windows y sin descargar el toolchain MIPS de libdragon:
-# estas 5 herramientas no dependen de el, ver
-# app/resources/tools/win32-x64/MANIFEST.md para el detalle y el
-# comando equivalente para correrlo a mano con Docker).
+# None of these 5 tools depend on the MIPS N64_INST toolchain
+# (DECOMP_STUBS/n64elfcompress do; these don't), so each job builds them with
+# a plain host C/C++ toolchain — no libdragon toolchain image, no MIPS
+# cross-compiler. See app/resources/tools/<platform>/MANIFEST.md for the
+# per-platform detail and the equivalent commands to run by hand.
 #
-# El .elf del reproductor (resources/rom-assets/) es un build aparte, con
-# el toolchain MIPS completo via Docker: no lo genera este workflow.
+# The player .elf (resources/rom-assets/) is a separate build, with the full
+# MIPS toolchain via Docker: no job here generates it.
+#
+# Each job uploads its own artifact; download it and replace the matching
+# app/resources/tools/<platform>/bin/ folder to update the committed
+# binaries.
 
 on:
   workflow_dispatch:
@@ -22,6 +26,7 @@ on:
 
 jobs:
   build-tools-windows:
+    # Cross-compiled from Linux with mingw-w64: no Windows runner needed.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +34,7 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
-      - name: Install mingw-w64 (posix threads, para std::thread)
+      - name: Install mingw-w64 (posix threads, for std::thread)
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
@@ -53,7 +58,7 @@ jobs:
           done
           ls -la app/resources/tools/win32-x64/bin
 
-      - name: Sanity check (run natively... via Wine, ya que el runner es Linux)
+      - name: Sanity check (native binaries, so run them via Wine on this Linux runner)
         run: |
           sudo apt-get install -y -qq --no-install-recommends wine64
           wine64 app/resources/tools/win32-x64/bin/mkdfs.exe || true
@@ -63,3 +68,85 @@ jobs:
         with:
           name: desktop-tools-win32-x64
           path: app/resources/tools/win32-x64/bin/*.exe
+
+  build-tools-linux:
+    # Built natively, but inside an ubuntu:20.04 container (rather than
+    # directly on the runner's own, newer Ubuntu) so the resulting glibc
+    # dependency stays compatible with distros far newer than that without
+    # rebuilding. See app/resources/tools/linux-x64/MANIFEST.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Build host tools (in ubuntu:20.04)
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo/core/libdragon/tools ubuntu:20.04 bash -lc '
+            set -e
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends g++ gcc make
+            CXX="g++ -static-libgcc -static-libstdc++" CC="gcc" \
+              make -B mkdfs n64tool videoconv64 audioconv64 ed64romconfig
+          '
+
+      - name: Collect binaries
+        run: |
+          mkdir -p app/resources/tools/linux-x64/bin
+          cp core/libdragon/tools/mkdfs/mkdfs app/resources/tools/linux-x64/bin/mkdfs
+          cp core/libdragon/tools/n64tool app/resources/tools/linux-x64/bin/n64tool
+          cp core/libdragon/tools/videoconv64/videoconv64 app/resources/tools/linux-x64/bin/videoconv64
+          cp core/libdragon/tools/audioconv64/audioconv64 app/resources/tools/linux-x64/bin/audioconv64
+          cp core/libdragon/tools/ed64romconfig app/resources/tools/linux-x64/bin/ed64romconfig
+          strip app/resources/tools/linux-x64/bin/*
+          chmod +x app/resources/tools/linux-x64/bin/*
+          ls -la app/resources/tools/linux-x64/bin
+
+      - name: Sanity check (native binaries, runner is Linux x64)
+        run: |
+          app/resources/tools/linux-x64/bin/mkdfs || true
+          app/resources/tools/linux-x64/bin/videoconv64 --help || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-tools-linux-x64
+          path: app/resources/tools/linux-x64/bin/*
+
+  build-tools-macos:
+    # Built natively with the Xcode command-line tools already on the
+    # runner. macos-13 is an Intel (x64) runner; darwin-arm64 (Apple
+    # Silicon) would need the same job on an ARM runner (e.g. macos-14) and
+    # is not covered yet. See app/resources/tools/darwin-x64/MANIFEST.md.
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Build host tools
+        working-directory: core/libdragon/tools
+        run: make mkdfs n64tool videoconv64 audioconv64 ed64romconfig
+
+      - name: Collect binaries
+        run: |
+          mkdir -p app/resources/tools/darwin-x64/bin
+          cp core/libdragon/tools/mkdfs/mkdfs app/resources/tools/darwin-x64/bin/mkdfs
+          cp core/libdragon/tools/n64tool app/resources/tools/darwin-x64/bin/n64tool
+          cp core/libdragon/tools/videoconv64/videoconv64 app/resources/tools/darwin-x64/bin/videoconv64
+          cp core/libdragon/tools/audioconv64/audioconv64 app/resources/tools/darwin-x64/bin/audioconv64
+          cp core/libdragon/tools/ed64romconfig app/resources/tools/darwin-x64/bin/ed64romconfig
+          strip app/resources/tools/darwin-x64/bin/*
+          chmod +x app/resources/tools/darwin-x64/bin/*
+          ls -la app/resources/tools/darwin-x64/bin
+
+      - name: Sanity check (native binaries, runner is macOS x64)
+        run: |
+          app/resources/tools/darwin-x64/bin/mkdfs || true
+          app/resources/tools/darwin-x64/bin/videoconv64 --help || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-tools-darwin-x64
+          path: app/resources/tools/darwin-x64/bin/*
