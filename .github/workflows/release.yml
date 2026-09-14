@@ -36,7 +36,7 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             artifact-glob: app/release/*.AppImage
-          - os: macos-13
+          - os: macos-15-intel
             platform: mac
             artifact-glob: app/release/*.zip
 

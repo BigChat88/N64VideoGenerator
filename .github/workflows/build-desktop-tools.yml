@@ -115,10 +115,15 @@ jobs:
 
   build-tools-macos:
     # Built natively with the Xcode command-line tools already on the
-    # runner. macos-13 is an Intel (x64) runner; darwin-arm64 (Apple
-    # Silicon) would need the same job on an ARM runner (e.g. macos-14) and
-    # is not covered yet. See app/resources/tools/darwin-x64/MANIFEST.md.
-    runs-on: macos-13
+    # runner. macos-15-intel is an Intel (x64) runner (GitHub retired the
+    # plain "macos-13"/"macos-14-large" Intel labels; "macos-latest" and
+    # bare "macos-15"/"macos-14" are Apple Silicon now, and GitHub has said
+    # Intel macOS runners stop entirely once the macOS 15 image retires,
+    # planned for fall 2027 — re-check the available labels then). darwin-arm64
+    # (Apple Silicon) would need the same job on an ARM runner (e.g.
+    # macos-15) and is not covered yet. See
+    # app/resources/tools/darwin-x64/MANIFEST.md.
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
         with:
