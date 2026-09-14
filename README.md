@@ -27,18 +27,29 @@ profile and quantization matrix.
 
 ### How to run it
 
-Download `N64VideoGenerator-<version>-portable.exe` from the project's GitHub
-Releases and run it directly — it is a portable executable, no installation
-required.
+Download the build for your OS from the project's GitHub Releases and run it
+directly — no installation required:
+
+- **Windows (10/11, 64-bit):** `N64VideoGenerator-<version>-portable.exe` — a
+  portable executable.
+- **Linux (x86_64):** `N64VideoGenerator-<version>-linux-x64.AppImage` — mark
+  it executable (`chmod +x N64VideoGenerator-*.AppImage`) and run it.
+- **macOS (Apple Silicon, arm64):** `N64VideoGenerator-<version>-mac-arm64.zip`
+  — unzip and run the `.app` inside. It isn't code-signed/notarized (no Apple
+  Developer certificate), so the first launch needs *right-click → Open* to
+  get past Gatekeeper's "unidentified developer" warning. Intel Macs aren't
+  supported — see `app/resources/tools/darwin-arm64/MANIFEST.md` for why.
 
 Then: pick an input video → set a ROM title → adjust options if you want →
 **Convert to .z64** → choose where to save the ROM.
 
 ### What it requires 
 
-- **Windows 10/11, 64-bit.** The native conversion tools are currently only
-  bundled for `win32-x64`. On macOS/Linux the app falls back to a libdragon
-  Docker container (development only) or a local `N64_INST` toolchain.
+- One of the platforms above. The native conversion tools are bundled for
+  `win32-x64` and `linux-x64`; `darwin-arm64` (macOS, Apple Silicon) support
+  is being finished (see `app/resources/tools/darwin-arm64/MANIFEST.md`). On
+  any other platform/architecture the app falls back to a libdragon Docker
+  container (development only) or a local `N64_INST` toolchain.
 - **`ffmpeg` and `ffprobe` on your `PATH`.** They are *not* bundled yet (the
   H.264 path needs a GPL `libx264` build — licensing decision pending), so
   install a recent FFmpeg and make sure `ffmpeg -version` works in a terminal.
@@ -55,6 +66,16 @@ Then: pick an input video → set a ROM title → adjust options if you want →
     `PATH`: *Start → "Edit the system environment variables" → Environment
     Variables → select `Path` → Edit → New*.
   - Verify: open a new terminal and run `ffmpeg -version` and `ffprobe -version`.
+
+  **Installing FFmpeg on Linux:**
+  - Debian/Ubuntu: `sudo apt install ffmpeg`
+  - Fedora: `sudo dnf install ffmpeg` (from the RPM Fusion repo)
+  - Arch: `sudo pacman -S ffmpeg`
+  - Verify: `ffmpeg -version` and `ffprobe -version`.
+
+  **Installing FFmpeg on macOS:**
+  - With [Homebrew](https://brew.sh/): `brew install ffmpeg`
+  - Verify: `ffmpeg -version` and `ffprobe -version`.
 
 
 ## Acknowledgements

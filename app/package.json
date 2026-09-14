@@ -46,6 +46,26 @@
     "portable": {
       "artifactName": "N64VideoGenerator-${version}-portable.exe"
     },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "AudioVideo",
+      "artifactName": "N64VideoGenerator-${version}-linux-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.video",
+      "identity": null,
+      "artifactName": "N64VideoGenerator-${version}-mac-${arch}.${ext}"
+    },
     "publish": null
   },
   "allowScripts": {
