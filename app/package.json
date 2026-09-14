@@ -55,7 +55,12 @@
     },
     "mac": {
       "target": [
-        "zip"
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
       "category": "public.app-category.video",
       "identity": null,

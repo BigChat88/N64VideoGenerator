@@ -34,11 +34,11 @@ directly — no installation required:
   portable executable.
 - **Linux (x86_64):** `N64VideoGenerator-<version>-linux-x64.AppImage` — mark
   it executable (`chmod +x N64VideoGenerator-*.AppImage`) and run it.
-- **macOS (Intel, x64):** `N64VideoGenerator-<version>-mac-x64.zip` — unzip
-  and run the `.app` inside. It isn't code-signed/notarized (no Apple
+- **macOS (Apple Silicon, arm64):** `N64VideoGenerator-<version>-mac-arm64.zip`
+  — unzip and run the `.app` inside. It isn't code-signed/notarized (no Apple
   Developer certificate), so the first launch needs *right-click → Open* to
-  get past Gatekeeper's "unidentified developer" warning. Apple Silicon
-  (arm64) isn't supported yet — see `app/resources/tools/darwin-x64/MANIFEST.md`.
+  get past Gatekeeper's "unidentified developer" warning. Intel Macs aren't
+  supported — see `app/resources/tools/darwin-arm64/MANIFEST.md` for why.
 
 Then: pick an input video → set a ROM title → adjust options if you want →
 **Convert to .z64** → choose where to save the ROM.
@@ -46,10 +46,10 @@ Then: pick an input video → set a ROM title → adjust options if you want →
 ### What it requires 
 
 - One of the platforms above. The native conversion tools are bundled for
-  `win32-x64` and `linux-x64`; `darwin-x64` (macOS Intel) support is being
-  finished (see `app/resources/tools/darwin-x64/MANIFEST.md`). On any other
-  platform/architecture the app falls back to a libdragon Docker container
-  (development only) or a local `N64_INST` toolchain.
+  `win32-x64` and `linux-x64`; `darwin-arm64` (macOS, Apple Silicon) support
+  is being finished (see `app/resources/tools/darwin-arm64/MANIFEST.md`). On
+  any other platform/architecture the app falls back to a libdragon Docker
+  container (development only) or a local `N64_INST` toolchain.
 - **`ffmpeg` and `ffprobe` on your `PATH`.** They are *not* bundled yet (the
   H.264 path needs a GPL `libx264` build — licensing decision pending), so
   install a recent FFmpeg and make sure `ffmpeg -version` works in a terminal.

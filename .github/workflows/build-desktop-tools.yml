@@ -115,15 +115,14 @@ jobs:
 
   build-tools-macos:
     # Built natively with the Xcode command-line tools already on the
-    # runner. macos-15-intel is an Intel (x64) runner (GitHub retired the
-    # plain "macos-13"/"macos-14-large" Intel labels; "macos-latest" and
-    # bare "macos-15"/"macos-14" are Apple Silicon now, and GitHub has said
-    # Intel macOS runners stop entirely once the macOS 15 image retires,
-    # planned for fall 2027 — re-check the available labels then). darwin-arm64
-    # (Apple Silicon) would need the same job on an ARM runner (e.g.
-    # macos-15) and is not covered yet. See
-    # app/resources/tools/darwin-x64/MANIFEST.md.
-    runs-on: macos-15-intel
+    # runner. macos-15 is an Apple Silicon (arm64) runner — the architecture
+    # of every Mac Apple has sold since 2020, and the one GitHub defaults
+    # its hosted macOS fleet to today. Intel (x64) macOS runners are on
+    # their way out on GitHub's side (they now need the separate
+    # "-intel"/"-large" labels) and Apple itself stopped making Intel Macs,
+    # so this targets darwin-arm64 only — see
+    # app/resources/tools/darwin-arm64/MANIFEST.md.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -136,22 +135,22 @@ jobs:
 
       - name: Collect binaries
         run: |
-          mkdir -p app/resources/tools/darwin-x64/bin
-          cp core/libdragon/tools/mkdfs/mkdfs app/resources/tools/darwin-x64/bin/mkdfs
-          cp core/libdragon/tools/n64tool app/resources/tools/darwin-x64/bin/n64tool
-          cp core/libdragon/tools/videoconv64/videoconv64 app/resources/tools/darwin-x64/bin/videoconv64
-          cp core/libdragon/tools/audioconv64/audioconv64 app/resources/tools/darwin-x64/bin/audioconv64
-          cp core/libdragon/tools/ed64romconfig app/resources/tools/darwin-x64/bin/ed64romconfig
-          strip app/resources/tools/darwin-x64/bin/*
-          chmod +x app/resources/tools/darwin-x64/bin/*
-          ls -la app/resources/tools/darwin-x64/bin
+          mkdir -p app/resources/tools/darwin-arm64/bin
+          cp core/libdragon/tools/mkdfs/mkdfs app/resources/tools/darwin-arm64/bin/mkdfs
+          cp core/libdragon/tools/n64tool app/resources/tools/darwin-arm64/bin/n64tool
+          cp core/libdragon/tools/videoconv64/videoconv64 app/resources/tools/darwin-arm64/bin/videoconv64
+          cp core/libdragon/tools/audioconv64/audioconv64 app/resources/tools/darwin-arm64/bin/audioconv64
+          cp core/libdragon/tools/ed64romconfig app/resources/tools/darwin-arm64/bin/ed64romconfig
+          strip app/resources/tools/darwin-arm64/bin/*
+          chmod +x app/resources/tools/darwin-arm64/bin/*
+          ls -la app/resources/tools/darwin-arm64/bin
 
-      - name: Sanity check (native binaries, runner is macOS x64)
+      - name: Sanity check (native binaries, runner is macOS arm64)
         run: |
-          app/resources/tools/darwin-x64/bin/mkdfs || true
-          app/resources/tools/darwin-x64/bin/videoconv64 --help || true
+          app/resources/tools/darwin-arm64/bin/mkdfs || true
+          app/resources/tools/darwin-arm64/bin/videoconv64 --help || true
 
       - uses: actions/upload-artifact@v4
         with:
-          name: desktop-tools-darwin-x64
-          path: app/resources/tools/darwin-x64/bin/*
+          name: desktop-tools-darwin-arm64
+          path: app/resources/tools/darwin-arm64/bin/*

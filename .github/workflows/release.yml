@@ -1,7 +1,7 @@
 name: Release Desktop App
 
 # On every push to main, build the Electron app in app/ for Windows, Linux
-# and macOS (Intel), and publish a single GitHub Release with all three
+# and macOS (Apple Silicon), and publish a single GitHub Release with all three
 # ready-to-download builds attached.
 #
 # Each build is self-contained: it only needs app/ (the prebuilt player .elf
@@ -36,7 +36,7 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             artifact-glob: app/release/*.AppImage
-          - os: macos-15-intel
+          - os: macos-15
             platform: mac
             artifact-glob: app/release/*.zip
 
