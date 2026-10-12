@@ -43,3 +43,10 @@ Notes:
 
 Built from whatever is checked out under `core/libdragon` at generation time
 (see `core/libdragon/libdragon.version`) — regenerate if that changes.
+
+Rebuilt against `n64brew/libdragon` commit `f26e1c16145e4d6ad7e391e1306513d684083c02`
+(`preview` branch, as of the 2026-10-12 migration from the archived
+`DragonMinded/libdragon`) — same commit as `resources/tools/win32-x64/` and
+`resources/rom-assets/`. `audioconv64`/`videoconv64`/`ed64romconfig` changed
+against the previous (`DragonMinded`) build; `mkdfs`/`n64tool` came out
+byte-identical.

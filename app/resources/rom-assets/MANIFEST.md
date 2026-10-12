@@ -189,7 +189,7 @@ They replicate `core/libdragon/n64.mk`'s defaults exactly:
 ```
 n64tool --toc --title "<user-chosen title>" --category N \
   --output <output>.z64.tmp --align 256 \
-  player.elf.stripped player.elf.sym <video>.dfs libdragon.version
+  player.elf.stripped player.elf.sym <video>.dfs libdragon.version toolchain.version
 
 ed64romconfig --savetype none --regionfree <output>.z64.tmp
 ```
