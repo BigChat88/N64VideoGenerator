@@ -45,8 +45,10 @@ Notes:
 
 ## `libdragon` submodule commit used
 
-`cbc66918f0673097a26408a061a3d1a90a9d0b0f` (`preview` branch) — same as the
-one used for `resources/rom-assets/`. Regenerate if the submodule changes.
+`f26e1c16145e4d6ad7e391e1306513d684083c02` (`n64brew/libdragon`, `preview`
+branch, as of the 2026-10-12 migration from the archived
+`DragonMinded/libdragon`) — same as the one used for `resources/rom-assets/`.
+Regenerate if the submodule changes.
 
 ## Pending: `ffmpeg.exe` / `ffprobe.exe`
 

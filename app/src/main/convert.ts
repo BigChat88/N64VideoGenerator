@@ -342,6 +342,7 @@ export async function convertVideoToZ64(
         join(romAssetsDir, "player.elf.sym"),
         dfsPath,
         join(romAssetsDir, "libdragon.version"),
+        join(romAssetsDir, "toolchain.version"),
       ],
       mode,
       toolsDir,

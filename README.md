@@ -6,7 +6,7 @@ Turns an ordinary video file into a
 **playable Nintendo 64 ROM** that plays that video back with sound on real N64
 hardware (e.g. through an EverDrive64 / SummerCart64) or in any N64 emulator.
 
-It does this by reusing [libdragon](https://github.com/DragonMinded/libdragon)'s
+It does this by reusing [libdragon](https://github.com/n64brew/libdragon)'s
 video (MPEG-1 / H.264) and audio decoding APIs: a small, generic player program
 is compiled once for the N64, and each conversion only re-packs your video into
 a fresh ROM alongside that player.
@@ -80,9 +80,10 @@ Then: pick an input video → set a ROM title → adjust options if you want →
 
 ## Acknowledgements
 
-Thanks to the **[libdragon](https://github.com/DragonMinded/libdragon)**
-team for the open-source N64 SDK, and to id Software / JAMDAT / EA for the
-original 2005 game.
+Thanks to the **[libdragon](https://github.com/n64brew/libdragon)**
+team for the open-source N64 SDK (continuing the project originally started
+by DragonMinded, archived in October 2026), and to id Software / JAMDAT / EA
+for the original 2005 game.
 
 ## AI Note
 

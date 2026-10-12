@@ -1,3 +1,0 @@
-author: eightbit
-url: posted on n64brew discord
-license: Public Domain

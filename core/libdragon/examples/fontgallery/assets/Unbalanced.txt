@@ -1,3 +1,0 @@
-author: jeti
-url: https://fontenddev.com/fonts/unbalanced/
-license: CC-BY 4.0

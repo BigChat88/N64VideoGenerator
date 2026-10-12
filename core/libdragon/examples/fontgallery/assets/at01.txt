@@ -1,3 +1,0 @@
-author: GrafxKid
-license: cc0
-url: https://grafxkid.itch.io/at01

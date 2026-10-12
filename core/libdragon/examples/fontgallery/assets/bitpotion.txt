@@ -1,3 +1,0 @@
-author: Joeb Rogers
-url: https://joebrogers.itch.io/bitpotion
-license: CC-BY 4.0

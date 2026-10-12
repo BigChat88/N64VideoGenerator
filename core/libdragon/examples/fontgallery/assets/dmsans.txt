@@ -1,3 +1,0 @@
-author: Colophon Foundry
-url: https://fonts.google.com/specimen/DM+Sans
-license: SIL 1.1

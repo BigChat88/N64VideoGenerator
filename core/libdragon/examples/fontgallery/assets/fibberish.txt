@@ -1,3 +1,0 @@
-author: Nathan Scott
-url: https://caffinate.itch.io/fibberish
-license: CC0
