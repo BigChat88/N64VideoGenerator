@@ -1,3 +1,0 @@
-url: https://mounirtohami.itch.io/minimalpixel-font
-author: Mounir Tohami
-license: free to use

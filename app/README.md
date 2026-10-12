@@ -49,7 +49,7 @@ that remux fails does "No audio" fall back to `videoconv64 --no-audio`.
 `tools-path.ts` resolves the tools in this order: (1) bundled in
 `resources/tools/<platform>-<arch>/bin/` (this is what the app uses today), (2)
 installed on the system (`$N64_INST/bin` or PATH), (3) the libdragon Docker
-container (`ghcr.io/dragonminded/libdragon`) as a last resort for development
+container (`ghcr.io/n64brew/libdragon`) as a last resort for development
 if neither (1) nor (2) is available.
 
 ## Development

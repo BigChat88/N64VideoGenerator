@@ -1,3 +1,0 @@
-url: https://fonts.google.com/specimen/Lato
-author: Łukasz Dziedzic
-license: SIL 1.1

@@ -1,3 +1,0 @@
-author: Carrois Apostrophe
-url: https://fonts.google.com/specimen/Fira+Mono/about
-license: SIL 1.1

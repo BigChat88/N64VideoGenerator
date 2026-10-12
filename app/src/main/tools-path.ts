@@ -15,7 +15,14 @@ export type ToolMode =
   | { mode: "system"; dir: string | null }
   | { mode: "docker"; image: string };
 
-const DOCKER_IMAGE = "ghcr.io/dragonminded/libdragon:latest";
+// DragonMinded/libdragon was archived on 2026-10-01; n64brew/libdragon is its
+// continuation (same "preview" branch, see .gitmodules). As of this change
+// this image hadn't been confirmed to exist yet at this path on ghcr.io — if
+// `docker run` fails to pull it, build it locally from n64brew/libdragon's
+// own Dockerfile instead (clone it, then `docker build -t
+// ghcr.io/n64brew/libdragon:latest .` from its root) so it resolves from the
+// local image cache.
+const DOCKER_IMAGE = "ghcr.io/n64brew/libdragon:latest";
 
 function platformDir(): string {
   const arch = process.arch; 

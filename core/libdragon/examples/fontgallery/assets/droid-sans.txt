@@ -1,3 +1,0 @@
-author: Google
-url: https://www.fontsquirrel.com/fonts/droid-sans
-license: Apache 2.0

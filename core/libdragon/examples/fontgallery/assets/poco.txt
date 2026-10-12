@@ -1,3 +1,0 @@
-author: jeti
-url: https://fontenddev.com/fonts/poco/
-license: CC-BY 4.0

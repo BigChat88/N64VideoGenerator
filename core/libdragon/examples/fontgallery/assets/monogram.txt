@@ -1,5 +1,0 @@
-name: monogram
-author: datagoblin
-license: CC0
-URL: https://datagoblin.itch.io/monogram
-

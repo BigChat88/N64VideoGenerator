@@ -12,22 +12,48 @@ combines these files with the `.dfs` produced by conversion (see plan in
   in its `%.z64:` rule).
 - `player.elf.sym` — symbol table produced by `n64sym --all` (included in the
   rompak so that crash backtraces stay readable).
-- `libdragon.version` — rompak metadata file (`N64_TOOLFILES` in
-  `core/libdragon/n64.mk`), required for `n64tool` to build the TOC correctly.
+- `libdragon.version`, `toolchain.version` — rompak metadata files. `n64.mk`'s
+  `N64_TOOLFILES = $(wildcard $(N64_INCLUDEDIR)/*.version)` picks up every
+  `*.version` file installed under the toolchain's include dir, not just
+  `libdragon.version` — `toolchain.version` (binutils/gcc/newlib versions) is
+  a second one that n64brew's fork added; `convert.ts`'s `n64tool` call passes
+  both, required for `n64tool` to build the TOC correctly.
 
 ## How they were generated
 
+As of the migration to `n64brew/libdragon` (see the top-level `.gitmodules`),
+`ghcr.io/n64brew/libdragon:latest` only had the bare MIPS toolchain in it (no
+libdragon library/headers/`n64.mk` installed), unlike the old
+`ghcr.io/dragonminded/libdragon:latest`, and wasn't confirmed reachable
+without auth — it was built locally instead, straight from the submodule's
+own `Dockerfile` (`docker build -t ghcr.io/n64brew/libdragon:latest
+core/libdragon`), then the library was built and installed into it before
+building the player:
+
 ```
-docker run --rm -v "<repo>:/libdragon" -w /libdragon \
-  ghcr.io/dragonminded/libdragon:latest bash -lc "make"
+# <repo> below is the top-level repo (not just core/): the submodule's gitlink
+# needs the real .git/modules to generate libdragon.version via git.
+docker run --rm -v "<repo>:/repo_root" -w /repo_root/core/libdragon \
+  ghcr.io/n64brew/libdragon:latest bash -lc "
+    make -j\$(nproc) && make install &&
+    cd ../ && make"
 # copy build/video.elf.stripped and build/video.elf.sym
 # copy /n64_toolchain/mips64-elf/include/*.version from the container
 ```
 
-- Image: `ghcr.io/dragonminded/libdragon:latest`
-- `libdragon` submodule commit used: `cbc66918f0673097a26408a061a3d1a90a9d0b0f`
+`make` here also needs `mkdfs`/`videoconv64`/`audioconv64` (not part of the
+toolchain image, see `app/resources/tools/*/MANIFEST.md`) and `n64sym`/
+`n64elfcompress` (built from `core/libdragon/tools`, same image) on
+`$N64_INST/bin`, plus `ffmpeg` on `PATH`, to get through the `video.z64`
+target's full dependency chain (it needs *some* `core/video.mp4` to drive
+`videoconv64` — content is irrelevant, it's discarded; only
+`build/video.elf.stripped`/`.sym` are kept).
+
+- Image: built locally from `n64brew/libdragon`'s own `Dockerfile` (tagged
+  `ghcr.io/n64brew/libdragon:latest`)
+- `libdragon` submodule commit used: `f26e1c16145e4d6ad7e391e1306513d684083c02`
   (`preview` branch)
-- Generated: 2026-09-04
+- Generated: 2026-10-12
 
 ## When to regenerate
 
@@ -145,6 +171,16 @@ regenerating these files.
   continues exactly where it was cut; with VADPCM/Opus it still lands on the
   nearest skip point (a format limitation). `disable_frame_skipping` is kept
   for robustness with the compressed formats.
+- **2026-10-12**: regenerated after migrating the `libdragon` submodule from
+  the archived `DragonMinded/libdragon` to its continuation,
+  `n64brew/libdragon` (`preview` branch) — see the top-level `.gitmodules`.
+  `core/src/main.c` did not change; this is purely a toolchain/library bump.
+  Verified by running `videoconv64`/`mkdfs`/`n64tool`/`ed64romconfig`
+  end-to-end (both the bundled `win32-x64` tools via
+  `npm run smoke-test` and the rebuilt `linux-x64` tools in a container) and
+  checking the resulting `.z64`'s magic header. Also added `toolchain.version`
+  (see Contents) and had `convert.ts` pass it to `n64tool`, matching
+  `n64.mk`'s `N64_TOOLFILES` wildcard.
 
 ## Flags `n64tool` combines them with (reference, see `convert.ts`)
 
@@ -153,7 +189,7 @@ They replicate `core/libdragon/n64.mk`'s defaults exactly:
 ```
 n64tool --toc --title "<user-chosen title>" --category N \
   --output <output>.z64.tmp --align 256 \
-  player.elf.stripped player.elf.sym <video>.dfs libdragon.version
+  player.elf.stripped player.elf.sym <video>.dfs libdragon.version toolchain.version
 
 ed64romconfig --savetype none --regionfree <output>.z64.tmp
 ```
