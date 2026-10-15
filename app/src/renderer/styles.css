@@ -31,6 +31,20 @@ h1 {
   gap: 16px;
 }
 
+.field[hidden] {
+  display: none;
+}
+
+/* A note under a .field.row, kept outside it so showing it doesn't reflow the row. */
+.field-note {
+  display: block;
+  margin-top: -10px;
+}
+
+.field-note[hidden] {
+  display: none;
+}
+
 label {
   font-size: 13px;
   color: #c6c6cf;

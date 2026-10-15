@@ -39,6 +39,10 @@
     <label><input type="checkbox" id="quick" /> Fast encoding (lower quality, much faster)</label>
   </section>
 
+  <section class="field row">
+    <label><input type="checkbox" id="frameSkipping" checked /> Skip frames to keep video in sync with audio (recommended)</label>
+  </section>
+
   <details class="advanced">
     <summary>Advanced options</summary>
 
@@ -56,11 +60,16 @@
       </select>
     </section>
 
+    <section class="field" id="ulcQualityField" hidden>
+      <label>ULC quality: <output id="ulcQualityValue">90</output></label>
+      <input type="range" id="ulcQuality" min="1" max="100" value="90" />
+      <small>Higher sounds better but takes more ROM space (90 &asymp; 90 kbps mono).</small>
+    </section>
+
     <section class="field row">
       <div>
         <label>Audio sample rate (Hz, max 32000)</label>
         <input type="number" id="audioSampleRate" value="32000" min="8000" max="32000" step="1000" />
-        <small id="opusRateNote" hidden>Opus always uses 48000 Hz internally; this field is ignored.</small>
       </div>
       <div>
         <label>Channels</label>
@@ -70,6 +79,7 @@
         </select>
       </div>
     </section>
+    <small id="opusRateNote" class="field-note" hidden>Opus always uses 48000 Hz internally; the sample rate field is ignored.</small>
 
     <section class="field">
       <label>Seek interval (seconds)</label>

@@ -182,6 +182,40 @@ regenerating these files.
   (see Contents) and had `convert.ts` pass it to `n64tool`, matching
   `n64.mk`'s `N64_TOOLFILES` wildcard.
 
+- **2026-10-15**: regenerated after making frame skipping configurable and
+  re-enabling it by default, to fix A/V drift reported on real hardware (the
+  video was paced only by `display_set_fps_limit()` and never caught up with
+  the audio once it fell behind). `main()` now reads an optional
+  `rom:/player.cfg` (`frame_skipping=0|1` lines, default 1) that `convert.ts`
+  writes into the DFS from the app's "Skip frames" checkbox, and passes
+  `.disable_frame_skipping = !frame_skipping` to `fmv_play`. To keep the
+  pause working with `video_sync` active, pause no longer stops the channel
+  and `wav64_seek`s back on resume (which landed on an earlier skip point and
+  tripped the `"Master time went backwards"` assert, see 2026-09-05 (4)): it
+  freezes the channel with `mixer_ch_set_freq(ch, 0)` (and volume 0), then
+  restores the wave's frequency on resume, so the audio position never moves
+  backwards and resume is exact with every codec. Built with
+  `make -o filesystem/video.m1v video.z64` over a placeholder `filesystem/`
+  (no real video or `videoconv64` needed); `libdragon.version` and
+  `toolchain.version` were left as they were: same commit and toolchain (the
+  rebuilt `libdragon.version` only differed by a spurious `"dirty": true`
+  from reading the Windows checkout inside the Linux container).
+
+- **2026-10-15 (2)**: regenerated after fixing stereo VADPCM playing slow and
+  choppy (mono was fine) on real hardware and emulators. `fmv_play` only
+  feeds the mixer twice per video frame, and while the RSP is busy decoding
+  video each `mixer_try_play()` fills a single AI buffer
+  (`mixer_poll_would_wait`). With `mixer_init`'s 512-sample buffers that caps
+  audio at ~0.77 s per second at 24 fps: stereo doubles the RSP mixing work,
+  so it hit the cap where mono didn't (a larger `audio_init` latency only made
+  it lag later, it didn't fix it). `main()` now calls
+  `audio_set_buffer_granularity(1024)` after `mixer_init`, doubling the audio
+  produced per call; 1024, 1536 and 2048 were all confirmed fine on hardware
+  with a 271 s, 23.976 fps, 320x240 MPEG-1 + 32 kHz stereo VADPCM video, and
+  1024 keeps the same 160 ms latency (lip sync unchanged). `player.cfg` also
+  accepts `audio_latency_ms` and `audio_buffer_samples` overrides for testing;
+  the app doesn't write them.
+
 ## Flags `n64tool` combines them with (reference, see `convert.ts`)
 
 They replicate `core/libdragon/n64.mk`'s defaults exactly:

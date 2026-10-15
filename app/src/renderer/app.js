@@ -30,7 +30,11 @@ function updateAudioFieldsState() {
   $("audioChannels").disabled = noAudio;
   $("audioSampleRate").disabled = noAudio || isOpus;
   $("opusRateNote").hidden = noAudio || !isOpus;
+  $("ulcQualityField").hidden = noAudio || $("audioCompress").value !== "ulc";
 }
+$("ulcQuality").addEventListener("input", () => {
+  $("ulcQualityValue").textContent = $("ulcQuality").value;
+});
 $("audioEnabled").addEventListener("change", updateAudioFieldsState);
 $("audioCompress").addEventListener("change", updateAudioFieldsState);
 updateAudioFieldsState();
@@ -43,9 +47,11 @@ function collectOptions(outputPath) {
     codec: $("codec").value,
     quality: Number($("quality").value),
     speed: $("quick").checked ? "quick" : "quality",
+    frameSkipping: $("frameSkipping").checked,
     seekIntervalSec: $("seekIntervalSec").value ? Number($("seekIntervalSec").value) : undefined,
     audioMode: $("audioEnabled").checked ? "source" : "none",
     audioCompress: $("audioCompress").value,
+    ulcQuality: Number($("ulcQuality").value),
     audioSampleRate: Number($("audioSampleRate").value),
     audioChannels: Number($("audioChannels").value),
     profile: $("profile").value,

@@ -26,6 +26,36 @@ static const char *find_video_filename(void){
     return candidates[0];
 }
 
+/** Runtime settings the app writes into "rom:/player.cfg". */
+typedef struct {
+    bool frame_skipping;    ///< fmv frame skipping (default: enabled, fmv's own default)
+    int audio_latency_ms;   ///< audio headroom for audio_init (default: libdragon's 160 ms)
+    int audio_buffer_samples; ///< AI buffer size in samples (default: 1024, see main())
+} player_cfg_t;
+
+/**
+ * Read the optional "rom:/player.cfg" ("key=value" lines). Missing file or
+ * keys keep the defaults.
+ */
+static player_cfg_t read_player_cfg(void){
+    player_cfg_t cfg = { .frame_skipping = true, .audio_latency_ms = 160, .audio_buffer_samples = 1024 };
+    FILE *f = fopen("rom:/player.cfg", "r");
+    if (!f)
+        return cfg;
+    char line[64];
+    int value;
+    while (fgets(line, sizeof(line), f)) {
+        if (sscanf(line, "frame_skipping=%d", &value) == 1)
+            cfg.frame_skipping = value != 0;
+        else if (sscanf(line, "audio_latency_ms=%d", &value) == 1 && value >= 40 && value <= 2000)
+            cfg.audio_latency_ms = value;
+        else if (sscanf(line, "audio_buffer_samples=%d", &value) == 1 && value >= 512 && value <= 4096 && value % 512 == 0)
+            cfg.audio_buffer_samples = value;
+    }
+    fclose(f);
+    return cfg;
+}
+
 /**
  * Draw pause icon
  * 
@@ -67,23 +97,21 @@ static void draw_play_icon(surface_t *disp, uint32_t color){
  */
 static void video_osd_callback(void *ctx, int frame_idx, float time_sec, fmv_control_t *ctrl) {
     static bool paused = false;
-    static double paused_audio_sec = 0.0;
 
     joypad_poll();
     if (joypad_get_buttons_pressed(JOYPAD_PORT_1).a) {
         paused = !paused;
-        if (paused) {
-            ctrl->pause(ctrl, true);
-            if (ctrl->audio) {
-                paused_audio_sec = mixer_ch_get_pos(AUDIO_MIXER_CHANNEL)
-                                 / (double)ctrl->audio->wave.frequency;
-                mixer_ch_stop(AUDIO_MIXER_CHANNEL);
-            }
-        } else {
-            ctrl->pause(ctrl, false);
-            if (ctrl->audio) {
-                wav64_play(ctrl->audio, AUDIO_MIXER_CHANNEL);
-                wav64_seek(ctrl->audio, AUDIO_MIXER_CHANNEL, paused_audio_sec);
+        ctrl->pause(ctrl, paused);
+        // Freeze the audio channel (frequency 0) instead of stopping it: its
+        // position never moves, so resume is exact with every codec and the
+        // master clock fmv's frame skipping syncs against never goes backwards.
+        if (ctrl->audio) {
+            if (paused) {
+                mixer_ch_set_vol(AUDIO_MIXER_CHANNEL, 0.0f, 0.0f);
+                mixer_ch_set_freq(AUDIO_MIXER_CHANNEL, 0.0f);
+            } else {
+                mixer_ch_set_freq(AUDIO_MIXER_CHANNEL, ctrl->audio->wave.frequency);
+                mixer_ch_set_vol(AUDIO_MIXER_CHANNEL, 1.0f, 1.0f);
             }
         }
     }
@@ -125,8 +153,15 @@ int main(void) {
     dfs_init(DFS_DEFAULT_LOCATION);
     rdpq_init();
     yuv_init();
-    audio_init(AUDIO_HZ, 4);
+    player_cfg_t cfg = read_player_cfg();
+    audio_init(AUDIO_HZ, AUDIO_INIT_LATENCY_MS(cfg.audio_latency_ms));
     mixer_init(8);
+    // fmv_play only feeds the mixer twice per video frame, and while the RSP
+    // is busy decoding video each call fills a single AI buffer. With
+    // mixer_init's 512-sample buffers that is ~0.77 s of audio per second at
+    // 24 fps (stereo VADPCM played slow and choppy); 1024 doubles it.
+    // Multiples of 512 keep mixer_init's own round alignment.
+    audio_set_buffer_granularity(cfg.audio_buffer_samples);
     joypad_init();
 
     wav64_init_compression(2);
@@ -152,7 +187,7 @@ int main(void) {
         fmv_play(video_fn, &(fmv_parms_t){
             .audio_mixer_channel = AUDIO_MIXER_CHANNEL,
             .osd_callback = video_osd_callback,
-            .disable_frame_skipping = true,
+            .disable_frame_skipping = !cfg.frame_skipping,
         });
         wait_for_replay(video_res);
     }

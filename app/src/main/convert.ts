@@ -1,9 +1,9 @@
-import { copyFile, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { runProcess } from "./run-process";
 import { extraEnvFor, resolveFfmpegPaths, resolveToolMode, ToolMode, ToolName } from "./tools-path";
-import { ConvertOptions, MAX_AUDIO_SAMPLE_RATE, ProgressEvent } from "./types";
+import { ConvertOptions, DEFAULT_ULC_QUALITY, MAX_AUDIO_SAMPLE_RATE, ProgressEvent } from "./types";
 
 const AUDIO_COMPRESS_CODE: Record<ConvertOptions["audioCompress"], number> = {
   none: 0,
@@ -282,6 +282,23 @@ export async function convertVideoToZ64(
     const audioCompress = noAudio ? "ulc" : options.audioCompress;
     const audioSampleRate = noAudio ? MAX_AUDIO_SAMPLE_RATE : options.audioSampleRate;
     const audioChannels = noAudio ? 1 : options.audioChannels;
+    // The silent track keeps audioconv64's default ULC quality: it's digital
+    // silence, so quality doesn't matter and the default keeps it tiny.
+    let audioCompressArg = String(AUDIO_COMPRESS_CODE[audioCompress]);
+    if (audioCompress === "ulc" && !noAudio) {
+      const q = Math.round(options.ulcQuality ?? DEFAULT_ULC_QUALITY);
+      if (!(q >= 1 && q <= 100)) {
+        throw new Error(`The ULC quality (${options.ulcQuality}) must be between 1 and 100.`);
+      }
+      audioCompressArg += `,quality=${q}`;
+    }
+    // Huffman (audioconv64's wav64 default for VADPCM) is expanded on the CPU,
+    // and stereo decompresses both planes of each block per read. Without it
+    // the frames stream by async DMA, which lightens stereo playback next to
+    // the video decoder for only ~12% more ROM space.
+    if (audioCompress === "vadpcm" && audioChannels === 2) {
+      audioCompressArg += ",huffman=false";
+    }
 
     // --- 1. videoconv64: input video -> .m1v/.h264 + .wav64 + .seek ---
     emit({
@@ -301,7 +318,7 @@ export async function convertVideoToZ64(
       ...(options.seekIntervalSec ? ["--seek", String(options.seekIntervalSec)] : []),
       ...(stripSourceAudio ? ["--no-audio"] : []),
       "--audio-compress",
-      String(AUDIO_COMPRESS_CODE[audioCompress]),
+      audioCompressArg,
       "--audio-parms",
       `${audioSampleRate},${audioChannels}`,
       "--profile",
@@ -317,6 +334,14 @@ export async function convertVideoToZ64(
       vcInput,
     ];
     await runTool("videoconv64", vcArgs, mode, toolsDir, mounts, extraEnv, onLine);
+
+    // Runtime settings for the precompiled player, which reads them at boot
+    // (core/src/main.c: read_player_cfg()).
+    await writeFile(
+      join(filesystemDir, "player.cfg"),
+      `frame_skipping=${options.frameSkipping === false ? 0 : 1}
+`
+    );
 
     // --- 2. mkdfs: pack filesystem/ into a .dfs ---
     emit({ kind: "stage", stage: "mkdfs", label: "Packing the ROM filesystem..." });

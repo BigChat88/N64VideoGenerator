@@ -18,8 +18,9 @@ deliverable: it embeds the video, the audio and the player, and needs nothing
 else to run.
 
 Encoding is configurable: video codec (MPEG-1 or H.264), quality (0–100),
-quick vs. quality encoding, target FPS, seek interval, audio compression
-(VADPCM / Opus / ULC / uncompressed), sample rate (max **32000 Hz** — the
+quick vs. quality encoding, frame skipping (keeps video in sync with audio),
+target FPS, seek interval, audio compression (VADPCM / Opus / ULC with
+adjustable quality / uncompressed), sample rate (max **32000 Hz** — the
 precompiled player is fixed at that rate), mono/stereo, plus advanced encoding
 profile and quantization matrix.
 
