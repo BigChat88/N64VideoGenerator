@@ -317,6 +317,13 @@ export async function convertVideoToZ64(
       ...(options.fps ? ["--fps", String(options.fps)] : []),
       ...(options.seekIntervalSec ? ["--seek", String(options.seekIntervalSec)] : []),
       ...(stripSourceAudio ? ["--no-audio"] : []),
+      // videoconv64's 2-pass MPEG-1 encode writes pass 1 to "-f null", where
+      // ffmpeg defaults to vfr and drops frames whose timestamps collide after
+      // the fps filter, while pass 2 (.m1v) keeps them all. On sources with
+      // irregular timestamps pass 2 then outruns the pass-1 log and aborts with
+      // "Input is longer than 2-pass log file". Forcing CFR makes both passes
+      // emit the same frames (the fps filter already makes the stream CFR).
+      ...(options.codec === "mpeg1" ? ["--ffmpeg-opts", "-fps_mode cfr"] : []),
       "--audio-compress",
       audioCompressArg,
       "--audio-parms",
