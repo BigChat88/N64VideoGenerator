@@ -60,6 +60,23 @@ npm run dev          # builds and opens the app
 npm run smoke-test   # runs the pipeline without UI against ../core/video.mp4
 ```
 
+> **Don't forget the binaries.** The app never compiles anything at runtime:
+> it only runs the prebuilt files committed under `resources/`. Any change to
+> `core/` (the player, `core/src/main.c`) or to the `core/libdragon` submodule
+> does nothing until those binaries are regenerated and committed:
+>
+> - `core/src/main.c` or `core/libdragon` changed → rebuild
+>   `resources/rom-assets/` (`player.elf.stripped`, `player.elf.sym`, the
+>   `*.version` files), see [rom-assets/MANIFEST.md](resources/rom-assets/MANIFEST.md).
+> - `core/libdragon` changed (its `tools/`: `videoconv64`, `audioconv64`,
+>   `mkdfs`, `n64tool`, `ed64romconfig`) → rebuild every
+>   `resources/tools/<platform>/bin/`, see each folder's `MANIFEST.md` and the
+>   `build-desktop-tools.yml` workflow.
+>
+> Also keep the app code (`src/main/convert.ts`) in sync with those binaries:
+> new player settings or tool flags only work once both sides are updated.
+> Otherwise the generated ROMs won't work, or conversion will fail.
+
 ## Structure
 
 ```
