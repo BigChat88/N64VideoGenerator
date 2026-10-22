@@ -1,0 +1,130 @@
+tools: subprocess: only let the child inherit its own stdio handles
+
+On Windows, subprocess_create() called CreateProcessA() with
+bInheritHandles=1, so every child also inherited every inheritable handle
+the parent had open at that moment (fopen() ones included). videoconv64
+spawns ffmpeg/audioconv64 from its audio and subtitle threads while the
+video thread post-processes video.m1v (mpeg1_prepend_userdata_sar()): the
+child kept that file open for its whole life, and the final rename()
+failed with ERROR_SHARING_VIOLATION ("failed to postprocess MPEG-1 stream
+(SAR user_data)"), on long videos with audio and non-square pixels.
+
+Restrict inheritance to the child's stdin/stdout/stderr pipes with
+PROC_THREAD_ATTRIBUTE_HANDLE_LIST.
+
+diff --git a/tools/common/subprocess.h b/tools/common/subprocess.h
+index 8fd51b643..28e1772cb 100644
+--- a/tools/common/subprocess.h
++++ b/tools/common/subprocess.h
+@@ -254,6 +254,7 @@ typedef struct _PROCESS_INFORMATION *LPPROCESS_INFORMATION;
+ typedef struct _SECURITY_ATTRIBUTES *LPSECURITY_ATTRIBUTES;
+ typedef struct _STARTUPINFOA *LPSTARTUPINFOA;
+ typedef struct _OVERLAPPED *LPOVERLAPPED;
++typedef struct _PROC_THREAD_ATTRIBUTE_LIST *LPPROC_THREAD_ATTRIBUTE_LIST;
+ 
+ #ifdef __clang__
+ #pragma clang diagnostic pop
+@@ -296,6 +297,11 @@ struct subprocess_startup_info_s {
+   void *hStdError;
+ };
+ 
++struct subprocess_startup_info_ex_s {
++  struct subprocess_startup_info_s StartupInfo;
++  LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList;
++};
++
+ struct subprocess_overlapped_s {
+   uintptr_t Internal;
+   uintptr_t InternalHigh;
+@@ -337,6 +343,14 @@ __declspec(dllimport) void *__stdcall CreateEventA(LPSECURITY_ATTRIBUTES, int,
+ __declspec(dllimport) int __stdcall CreateProcessA(
+     const char *, char *, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, int,
+     unsigned long, void *, const char *, LPSTARTUPINFOA, LPPROCESS_INFORMATION);
++__declspec(dllimport) int __stdcall InitializeProcThreadAttributeList(
++    LPPROC_THREAD_ATTRIBUTE_LIST, unsigned long, unsigned long,
++    subprocess_size_t *);
++__declspec(dllimport) int __stdcall UpdateProcThreadAttribute(
++    LPPROC_THREAD_ATTRIBUTE_LIST, unsigned long, subprocess_size_t, void *,
++    subprocess_size_t, void *, subprocess_size_t *);
++__declspec(dllimport) void __stdcall DeleteProcThreadAttributeList(
++    LPPROC_THREAD_ATTRIBUTE_LIST);
+ __declspec(dllimport) int __stdcall CloseHandle(void *);
+ __declspec(dllimport) unsigned long __stdcall WaitForSingleObject(
+     void *, unsigned long);
+@@ -474,6 +488,14 @@ int subprocess_create_ex(const char *const commandLine[], int options,
+   const unsigned long startFUseStdHandles = 0x00000100;
+   const unsigned long handleFlagInherit = 0x00000001;
+   const unsigned long createNoWindow = 0x08000000;
++  const unsigned long extendedStartupInfoPresent = 0x00080000;
++  const subprocess_size_t procThreadAttributeHandleList = 0x00020002;
++  struct subprocess_startup_info_ex_s startInfoEx;
++  LPPROC_THREAD_ATTRIBUTE_LIST attrList;
++  subprocess_size_t attrListSize = 0;
++  void *inheritedHandles[3];
++  unsigned long numInheritedHandles;
++  int created;
+   struct subprocess_subprocess_information_s processInfo;
+   struct subprocess_security_attributes_s saAttr = {sizeof(saAttr),
+                                                     SUBPROCESS_NULL, 1};
+@@ -708,18 +730,49 @@ int subprocess_create_ex(const char *const commandLine[], int options,
+ 
+   commandLineCombined[len] = '\0';
+ 
+-  if (!CreateProcessA(
+-          SUBPROCESS_NULL,
+-          commandLineCombined, // command line
+-          SUBPROCESS_NULL,     // process security attributes
+-          SUBPROCESS_NULL,     // primary thread security attributes
+-          1,                   // handles are inherited
+-          flags,               // creation flags
+-          used_environment,    // used environment
+-          SUBPROCESS_NULL,     // use parent's current directory
+-          SUBPROCESS_PTR_CAST(LPSTARTUPINFOA,
+-                              &startInfo), // STARTUPINFO pointer
+-          SUBPROCESS_PTR_CAST(LPPROCESS_INFORMATION, &processInfo))) {
++  // Only let the child inherit its own stdio pipes. Every handle opened with
++  // inheritance enabled (fopen() ones included) would otherwise leak into it,
++  // so a file another thread had open at that moment would stay open for the
++  // child's whole life, and could not be renamed or deleted until it exits.
++  numInheritedHandles = 0;
++  inheritedHandles[numInheritedHandles++] = startInfo.hStdInput;
++  inheritedHandles[numInheritedHandles++] = startInfo.hStdOutput;
++  if (startInfo.hStdError != startInfo.hStdOutput) {
++    inheritedHandles[numInheritedHandles++] = startInfo.hStdError;
++  }
++
++  // The first call only reports the size needed (and fails because of it).
++  InitializeProcThreadAttributeList(SUBPROCESS_NULL, 1, 0, &attrListSize);
++  attrList = SUBPROCESS_CAST(LPPROC_THREAD_ATTRIBUTE_LIST, _alloca(attrListSize));
++  if (!InitializeProcThreadAttributeList(attrList, 1, 0, &attrListSize)) {
++    return -1;
++  }
++  if (!UpdateProcThreadAttribute(attrList, 0, procThreadAttributeHandleList,
++                                 inheritedHandles,
++                                 numInheritedHandles * sizeof(void *),
++                                 SUBPROCESS_NULL, SUBPROCESS_NULL)) {
++    DeleteProcThreadAttributeList(attrList);
++    return -1;
++  }
++
++  startInfoEx.StartupInfo = startInfo;
++  startInfoEx.StartupInfo.cb = sizeof(startInfoEx);
++  startInfoEx.lpAttributeList = attrList;
++
++  created = CreateProcessA(
++      SUBPROCESS_NULL,
++      commandLineCombined, // command line
++      SUBPROCESS_NULL,     // process security attributes
++      SUBPROCESS_NULL,     // primary thread security attributes
++      1,                   // handles are inherited (only those in attrList)
++      flags | extendedStartupInfoPresent, // creation flags
++      used_environment,    // used environment
++      SUBPROCESS_NULL,     // use parent's current directory
++      SUBPROCESS_PTR_CAST(LPSTARTUPINFOA,
++                          &startInfoEx), // STARTUPINFOEX pointer
++      SUBPROCESS_PTR_CAST(LPPROCESS_INFORMATION, &processInfo));
++  DeleteProcThreadAttributeList(attrList);
++  if (!created) {
+     return -1;
+   }
+ 

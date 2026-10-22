@@ -119,6 +119,8 @@ details.advanced summary {
   font-weight: 600;
   margin-bottom: 12px;
   color: #c6c6cf;
+  /* Error messages can carry long paths with no spaces to break at. */
+  overflow-wrap: anywhere;
 }
 
 #log {
@@ -130,6 +132,7 @@ details.advanced summary {
   overflow-y: auto;
   font-size: 12px;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   margin: 8px 0 0;
 }
 
