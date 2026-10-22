@@ -71,7 +71,9 @@ npm run smoke-test   # runs the pipeline without UI against ../core/video.mp4
 > - `core/libdragon` changed (its `tools/`: `videoconv64`, `audioconv64`,
 >   `mkdfs`, `n64tool`, `ed64romconfig`) → rebuild every
 >   `resources/tools/<platform>/bin/`, see each folder's `MANIFEST.md` and the
->   `build-desktop-tools.yml` workflow.
+>   `build-desktop-tools.yml` workflow. Apply `core/patches/*.patch` to the
+>   submodule first (see [core/patches/README.md](../core/patches/README.md)),
+>   or the tools are built without the project's own fixes.
 >
 > Also keep the app code (`src/main/convert.ts`) in sync with those binaries:
 > new player settings or tool flags only work once both sides are updated.

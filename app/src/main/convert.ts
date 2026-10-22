@@ -113,37 +113,102 @@ async function runFf(
 }
 
 /**
- * True if the file has at least one audio stream. Best-effort: if ffprobe can't
- * be run at all we assume it does (the previous behavior) and let videoconv64
- * report any real tooling problem itself.
+ * Lists the stream indexes of the file's audio streams, in file order.
+ * Best-effort: if ffprobe can't be run at all
+ * this returns null, and the caller assumes the video has a single audio track
+ * (the previous behavior) and lets videoconv64 report any real tooling problem
+ * itself.
  */
-async function hasAudioStream(
+async function probeAudioStreams(
   ffprobe: string,
   inputPath: string,
   mode: ToolMode,
   mounts: Mount[],
   env: NodeJS.ProcessEnv | undefined,
   emit: Emit
-): Promise<boolean> {
+): Promise<number[] | null> {
   try {
     const out = await runFf(
       "ffprobe",
       ffprobe,
-      ["-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", inputPath],
+      [
+        "-v",
+        "error",
+        "-select_streams",
+        "a",
+        "-show_entries",
+        "stream=index",
+        "-of",
+        "csv=p=0",
+        inputPath,
+      ],
       mode,
       mounts,
       env,
       emit
     );
-    return out.trim().length > 0;
+    return out
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => /^\d+$/.test(line))
+      .map(Number);
   } catch (err) {
     emit({
       kind: "log",
       stream: "stderr",
       line: `Could not probe for audio streams (${err instanceof Error ? err.message : String(err)}); assuming the video has audio.`,
     });
-    return true;
+    return null;
   }
+}
+
+/**
+ * Remuxes `inputPath` keeping only its first video stream, the audio stream
+ * `audioIndex` and (if `keepSubtitles`) the subtitle streams, all stream-copied
+ * so this stays fast.
+ *
+ * videoconv64 converts every audio track of the input, and once there is more
+ * than one it names them "video.0.wav64", "video.1.wav64"... while fmv_play()
+ * (core/libdragon/src/video/fmv.c) only looks for "video.wav64": a video with
+ * several audio tracks (eg. one per language) would end up as a silent ROM,
+ * also carrying every unused track.
+ */
+async function remuxWithSingleAudio(
+  ffmpeg: string,
+  inputPath: string,
+  outputPath: string,
+  audioIndex: number,
+  keepSubtitles: boolean,
+  mode: ToolMode,
+  mounts: Mount[],
+  env: NodeJS.ProcessEnv | undefined,
+  emit: Emit
+): Promise<void> {
+  await runFf(
+    "ffmpeg",
+    ffmpeg,
+    [
+      "-hide_banner",
+      "-nostats",
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      inputPath,
+      "-map",
+      "0:v:0",
+      "-map",
+      `0:${audioIndex}`,
+      ...(keepSubtitles ? ["-map", "0:s?"] : []),
+      "-c",
+      "copy",
+      outputPath,
+    ],
+    mode,
+    mounts,
+    env,
+    emit
+  );
 }
 
 /**
@@ -239,8 +304,51 @@ export async function convertVideoToZ64(
     emit({ kind: "stage", stage: "probe", label: "Checking the audio track..." });
     let vcInput = inputCopy;
     let silentTrackReady = false;
-    const needSilentTrack =
-      noAudio || !(await hasAudioStream(ffprobe, inputCopy, mode, mounts, extraEnv, emit));
+    const audioStreams = noAudio
+      ? []
+      : await probeAudioStreams(ffprobe, inputCopy, mode, mounts, extraEnv, emit);
+    const needSilentTrack = noAudio || audioStreams?.length === 0;
+    if (audioStreams && audioStreams.length > 1) {
+      // Always the first track, whatever the container marks as default.
+      const chosen = audioStreams[0];
+      emit({
+        kind: "log",
+        stream: "stdout",
+        line: `The video has ${audioStreams.length} audio tracks; using the first one (stream #${chosen}).`,
+      });
+      // Same "video" stem requirement as the silent remux below.
+      const singleDir = join(workDir, "single-audio");
+      await mkdir(singleDir, { recursive: true });
+      const singleInput = join(singleDir, "video.mkv");
+      // Copying the subtitles can fail for codecs Matroska can't carry (eg.
+      // mp4's mov_text), so retry without them rather than keep every track.
+      for (const keepSubtitles of [true, false]) {
+        try {
+          await remuxWithSingleAudio(
+            ffmpeg,
+            inputCopy,
+            singleInput,
+            chosen,
+            keepSubtitles,
+            mode,
+            mounts,
+            extraEnv,
+            emit
+          );
+          vcInput = singleInput;
+          if (!keepSubtitles) {
+            emit({ kind: "log", stream: "stderr", line: "Could not keep the subtitles; continuing without them." });
+          }
+          break;
+        } catch (err) {
+          emit({
+            kind: "log",
+            stream: "stderr",
+            line: `Could not select a single audio track (${err instanceof Error ? err.message : String(err)})${keepSubtitles ? "; retrying without subtitles" : "; continuing with all of them"}.`,
+          });
+        }
+      }
+    }
     if (needSilentTrack) {
       emit({
         kind: "log",
